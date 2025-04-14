@@ -30,6 +30,7 @@ class DerivLiveData(bt.feeds.DataBase):
         self.granularity = granularity
         self.realtime_md = False
         self.md = collections.deque()
+        self.ohlc = {}
         self.ws = None
         self.thread = None
 
@@ -38,36 +39,48 @@ class DerivLiveData(bt.feeds.DataBase):
         self._start_ws()
 
     def _start_ws(self):
+        def on_open(ws):
+            #self.log("WebSocket connected.")
+            self.keep_alive()
+            ws.send(json.dumps({
+                "ticks_history": self.symbol,
+                "adjust_start_time": 1,
+                "count": self.history_size,
+                "end": "latest",
+                "granularity": self.granularity,
+                "start": 1,
+                "style": "candles"
+            }))
+
         def on_message(ws, message):
             data = json.loads(message)
             if data['msg_type'] == 'candles':
                 # historical MD
                 self.log(data)
                 for candle in data['candles']:
+                    self.ohlc['close'] = candle['close']
                     self.md.append(candle)
-            elif data['msg_type'] == 'ohlc':
+                self.reset_ohlc()
+                ws.send(json.dumps({
+                    "ticks": self.symbol,
+                    "subscribe": 1
+                }))
+            elif data['msg_type'] == 'tick':
                 # real-time MD
-                if data['ohlc']['epoch'] % self.granularity == 0:
-                    self.log(data)
-                    self.md.append(data['ohlc'])
+                #self.log(data)
+                self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
+                if self.ohlc['epoch'] % self.granularity == 0:
+                    self.log(str(self.ohlc))
+                    self.md.append(self.ohlc)
+                    self.reset_ohlc()
                     self.realtime_md = True
-                    ws.sock.ping()
 
         def on_error(ws, message):
             self.log(f"[DerivLiveData] on_error: {str(message)}")
 
         def run_ws():
             self.ws = websocket.WebSocketApp(f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}",
-                on_open=lambda ws: ws.send(json.dumps({
-                    "ticks_history": self.symbol,
-                    "adjust_start_time": 1,
-                    "count": self.history_size,
-                    "end": "latest",
-                    "granularity": self.granularity,
-                    "start": 1,
-                    "style": "candles",
-                    "subscribe": 1
-                })),
+                on_open=on_open,
                 on_message=on_message,
                 on_error=on_error
             )
@@ -81,13 +94,13 @@ class DerivLiveData(bt.feeds.DataBase):
         return True
 
     def _load(self):
-        #self.log("_load")
+        #self.log(f"_load {self.symbol}")
         if len(self.md) == 0:
             time.sleep(0.5)
             return None
 
         c = self.md.popleft()
-        self.log(c)
+        #self.log(c)
         dt = datetime.fromtimestamp(c['epoch'], timezone.utc)
         self.lines.datetime[0] = bt.date2num(dt)
         self.lines.open[0] = float(c['open'])
@@ -99,3 +112,41 @@ class DerivLiveData(bt.feeds.DataBase):
         #dt = datetime.now(timezone.utc)
         #self.log(f"diff from now: {bt.date2num(dt)} - {self.lines.datetime[0]} = {bt.date2num(dt) - self.lines.datetime[0]}")
         return True
+
+    def keep_alive(self):
+        def send_ping():
+            #print(f"{self.symbol}: send_ping")
+            if self.ws:
+                self.ws.send(json.dumps({'ping': 1}))
+                #self.ws.sock.ping()
+            else:
+                self.log("ping: WebSocket not connected")
+            
+            # Re-run the send_ping function every 30 seconds
+            self._schedule_next_ping()
+
+        def start_send_ping():
+            # Call send_ping initially
+            send_ping()
+
+        # Start the periodic call using Timer
+        self._schedule_next_ping = lambda: threading.Timer(30, send_ping).start()
+
+        # First call to start the periodic checks
+        start_send_ping()
+
+    def reset_ohlc(self):
+        self.ohlc = {
+            'open': self.ohlc['close'],
+            'high': None,
+            'low': None,
+            'close': None
+        }
+
+    def update_ohlc(self, epoch, px):
+        self.ohlc['epoch'] = epoch
+        self.ohlc['close'] = px
+        if self.ohlc['high'] is None or px > self.ohlc['high']:
+            self.ohlc['high'] = px
+        if self.ohlc['low'] is None or px < self.ohlc['low']:
+            self.ohlc['low'] = px

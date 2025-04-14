@@ -11,7 +11,7 @@ import threading
 class DerivBroker(bt.broker.BrokerBase):
     def log(self, txt, dt=None):
         ''' Logging function for this broker'''
-        ticker = '<brk>'
+        ticker = '<broker>'
         if self.logger:
             self.logger.debug('%-10s: %s' % (ticker, txt))
         else:
@@ -41,24 +41,26 @@ class DerivBroker(bt.broker.BrokerBase):
             self.log(f"on_error: {str(message)}")
 
         def on_message(ws, message):
-            print(f"on_message: {message}")
+            #print(f"on_message: {message}")
             data = json.loads(message)
-            self.log(f"on_message: {message}")
             if data['msg_type'] == 'authorize':
+                self.log(f"on_message: {message}")
                 if "authorize" in data:
                     self.cash = data['authorize']['balance']
                     self.log(f"balance: {data['authorize']['balance']}")
                     self.subscribe_positions()
             elif data['msg_type'] == 'portfolio':
                 if "portfolio" in data:
+                    self.log(f"Positions: {len(data['portfolio']['contracts'])}")
                     self.positions = {}
                     for c in data['portfolio']['contracts']:
                         p = bt.Position()
-                        self.log(f"add position for: {c['symbol']}")
+                        #self.log(f"add position for: {c['symbol']}")
                         self.positions[c['symbol']] = p
                     self.is_ready = True
                     ws.sock.ping()
             elif data['msg_type'] == 'proposal':
+                self.log(f"on_message: {message}")
                 msg = {
                     "buy": data['proposal']['id'],
                     "price": 100000000000
@@ -113,10 +115,9 @@ class DerivBroker(bt.broker.BrokerBase):
         else:
             self.log("⚠️ WebSocket not connected")
 
-        order = bt.BuyOrder(simulated=True) if is_buy else bt.SellOrder(simulated=True)
+        order = bt.BuyOrder(simulated=True, size=size) if is_buy else bt.SellOrder(simulated=True, size=size)
         order.ref = self.order_id
         order.created.price = 0
-        order.size = size
 
         self.order_id += 1
         return order

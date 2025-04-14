@@ -23,6 +23,9 @@ def run_bot():
     logger.add(f'log/live_{config["strategy"]["name"]}.log',
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
             #filter = lambda record, ticker=b['config["ticker"]']: record['extra'].get("ticker", '') == ticker)
+
+    logger.info("")
+    logger.info("Starting strategy")
     cerebro = bt.Cerebro()
 
     # Add live data feed

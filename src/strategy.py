@@ -99,8 +99,8 @@ class AntyStrategy(bt.Strategy):
                 elif slow_falling and not fast_up and is_rising:
                     signal = -1
 
-            self.log(d, "%s: %.4f, hi %.4f, lo %.4f; %%K %.2f, %%D %.2f; %d/%d/%d %d/%d %d/%d signal %d" %
-                (d.datetime.datetime(0).isoformat(), d.close[0], d.high[0], d.low[0], self.stoch[d].percK[0], self.stoch[d].percD[0],
+            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d %d/%d %d/%d signal %d" %
+                (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], self.stoch[d].percK[0], self.stoch[d].percD[0],
                 fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, is_falling, is_rising, signal)
             )
 
@@ -111,13 +111,17 @@ class AntyStrategy(bt.Strategy):
                 if signal != 0:
                     if signal == 1:
                         # go long
-                        order= self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        self.log(d, 'BUY CREATE (%d), %.3f at %.3f\n' % 
-                            (order.ref, order.size, order.created.price))
+                        order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                        print('BUY CREATE %s (%d), %.3f at %.3f' % 
+                            (d.ticker, order.ref, order.size, order.created.price))
+                        self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
+                            (d.ticker, order.ref, order.size, order.created.price))
 
                     elif signal == -1:
                         # go short
                         order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        self.log(d, 'SELL CREATE (%d), %.3f at %.3f\n' % 
-                            (order.ref, order.size, order.created.price))
+                        print('SELL CREATE %s (%d), %.3f at %.3f' % 
+                            (d.ticker, order.ref, order.size, order.created.price))
+                        self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
+                            (d.ticker, order.ref, order.size, order.created.price))
                             
