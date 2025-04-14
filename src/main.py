@@ -16,11 +16,13 @@ def run_bot():
         config = json.load(f)
         print(config)
 
+    tm = time.localtime()
+
     logger.remove()
     #logger.add(sys.stderr,
     #    format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>')
     #    #filter = lambda record: record['extra'] is {})
-    logger.add(f'log/live_{config["strategy"]["name"]}.log',
+    logger.add('log/live_%s_%04d%02d%02d.log' % (config["strategy"]["name"], tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
             #filter = lambda record, ticker=b['config["ticker"]']: record['extra'].get("ticker", '') == ticker)
 

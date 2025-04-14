@@ -1,3 +1,3 @@
 #!/bin/bash
-kill -f start_bobot.sh
-kill -f python
+pkill -f start_bobot.sh
+pkill -f 'python3 src/main.py'
