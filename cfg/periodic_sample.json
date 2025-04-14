@@ -1,0 +1,31 @@
+{
+    "strategy": {
+        "name": "Anty"
+    },
+    "auth": {
+        "account_id": "<APP_ID>",
+        "api_key": "<APP_KEY>"
+    },
+    "trade": {
+        "stake": 10,
+        "expiration_min": 15
+    },
+    "feed": {
+        "history_size": 30,
+        "timeframe_sec": 300,
+        "tickers": [
+            "WLDEUR"
+        ],
+        "-tickers": [
+            "WLDEUR",
+            "WLDGBP",
+            "WLDUSD",
+            "WLDXAU",
+            "OTC_AS51",
+            "OTC_GDAXI",
+            "OTC_FTSE",
+            "OTC_SPC",
+            "OTC_NDX"
+        ]
+    }
+}
