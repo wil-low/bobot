@@ -108,7 +108,7 @@ class DerivBroker(bt.broker.BrokerBase):
         if not is_buy:
             size = -size
         p = bt.Position(size, price)
-        self.log(f"Add position for {symbol}: px {price}, size {size}")
+        #self.log(f"Add position for {symbol}: px {price}, size {size}")
         self.positions[symbol] = p
 
     def buy_contract(self, symbol, is_buy, size):
@@ -166,7 +166,7 @@ class DerivBroker(bt.broker.BrokerBase):
                 try:
                     self.ws.send(json.dumps(msg))
                 except websocket.WebSocketConnectionClosedException:
-                    os.abort()
+                    os._exit(1)
             else:
                 self.log("WebSocket not connected")
             

@@ -122,7 +122,7 @@ class DerivLiveData(bt.feeds.DataBase):
                     self.ws.send(json.dumps({'ping': 1}))
                     #self.ws.sock.ping()
                 except websocket.WebSocketConnectionClosedException:
-                    os.abort()
+                    os._exit(1)
             else:
                 self.log("ping: WebSocket not connected")
             
