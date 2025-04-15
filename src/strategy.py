@@ -8,6 +8,7 @@ class AntyStrategy(bt.Strategy):
         ('stake', 1),
         ('overbought', 20),
         ('oversold', 80),
+        ('require_fast_trend', False),
         ('logger', None),
     )
 
@@ -104,10 +105,12 @@ class AntyStrategy(bt.Strategy):
             if fast_dir_changed and not_over:
                 slow_rising = AntyStrategy.is_rising(self.stoch[d].percD, self.params.trending_bars)
                 slow_falling = AntyStrategy.is_falling(self.stoch[d].percD, self.params.trending_bars)
-
-                fast_was_rising = AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
-                fast_was_falling = AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
-
+                if self.params.require_fast_trend:
+                    fast_was_rising = AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
+                    fast_was_falling = AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
+                else:
+                    fast_was_rising = True
+                    fast_was_falling = True
                 if slow_rising and fast_up and fast_was_falling:
                     signal = 1
                 elif slow_falling and not fast_up and fast_was_rising:
