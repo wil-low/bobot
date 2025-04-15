@@ -1,6 +1,7 @@
 # datafeed.py
 
 import collections
+import os
 import traceback
 import backtrader as bt
 import websocket
@@ -117,8 +118,11 @@ class DerivLiveData(bt.feeds.DataBase):
         def send_ping():
             #print(f"{self.symbol}: send_ping")
             if self.ws:
-                self.ws.send(json.dumps({'ping': 1}))
-                #self.ws.sock.ping()
+                try:
+                    self.ws.send(json.dumps({'ping': 1}))
+                    #self.ws.sock.ping()
+                except websocket.WebSocketConnectionClosedException:
+                    os.abort()
             else:
                 self.log("ping: WebSocket not connected")
             

@@ -1,6 +1,7 @@
 # broker.py
 
 import collections
+import os
 import time
 import traceback
 import backtrader as bt
@@ -151,7 +152,10 @@ class DerivBroker(bt.broker.BrokerBase):
                 "portfolio": 1
             }
             if self.ws:
-                self.ws.send(json.dumps(msg))
+                try:
+                    self.ws.send(json.dumps(msg))
+                except websocket.WebSocketConnectionClosedException:
+                    os.abort()
             else:
                 self.log("WebSocket not connected")
             
