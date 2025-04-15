@@ -6,8 +6,8 @@ class AntyStrategy(bt.Strategy):
     params = (
         ('trending_bars', 3),
         ('stake', 1),
-        ('overbought', 25),
-        ('oversold', 75),
+        ('overbought', 20),
+        ('oversold', 80),
         ('logger', None),
     )
 
@@ -98,18 +98,24 @@ class AntyStrategy(bt.Strategy):
 
             slow_rising = False
             slow_falling = False
+            fast_was_rising = False
+            fast_was_falling = False
             signal = 0
             if fast_dir_changed and not_over:
                 slow_rising = AntyStrategy.is_rising(self.stoch[d].percD, self.params.trending_bars)
                 slow_falling = AntyStrategy.is_falling(self.stoch[d].percD, self.params.trending_bars)
-                if slow_rising and fast_up:
+
+                fast_was_rising = AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
+                fast_was_falling = AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
+
+                if slow_rising and fast_up and fast_was_falling:
                     signal = 1
-                elif slow_falling and not fast_up:
+                elif slow_falling and not fast_up and fast_was_rising:
                     signal = -1
 
-            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d %d/%d signal %d" %
+            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d, %d/%d, %d/%d; signal %d" %
                 (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], self.stoch[d].percK[0], self.stoch[d].percD[0],
-                fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, signal)
+                fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, fast_was_rising, fast_was_falling, signal)
             )
 
             if signal != 0:
