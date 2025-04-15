@@ -6,6 +6,8 @@ class AntyStrategy(bt.Strategy):
     params = (
         ('trending_bars', 3),
         ('stake', 1),
+        ('overbought', 25),
+        ('oversold', 75),
         ('logger', None),
     )
 
@@ -87,7 +89,12 @@ class AntyStrategy(bt.Strategy):
                 continue
             fast_up = (self.stoch[d].percK[0] - self.stoch[d].percK[-1] > 0)
             fast_dir_changed = fast_up != (self.stoch[d].percK[-1] - self.stoch[d].percK[-2] > 0)
-            not_over = self.stoch[d].percD < 80 and self.stoch[d].percD > 20 and self.stoch[d].percK < 80 and self.stoch[d].percK > 20
+            not_over = (
+                self.stoch[d].percD < self.params.oversold and
+                self.stoch[d].percD > self.params.overbought and
+                self.stoch[d].percK < self.params.oversold and
+                self.stoch[d].percK > self.params.overbought
+            )
 
             slow_rising = False
             slow_falling = False
@@ -97,8 +104,8 @@ class AntyStrategy(bt.Strategy):
             if fast_dir_changed and not_over:
                 slow_rising = AntyStrategy.is_rising(self.stoch[d].percD, self.params.trending_bars)
                 slow_falling = AntyStrategy.is_falling(self.stoch[d].percD, self.params.trending_bars)
-                is_falling = AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
-                is_rising = AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
+                is_falling = True #AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
+                is_rising = True  #AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
                 if slow_rising and fast_up and is_falling:
                     signal = 1
                 elif slow_falling and not fast_up and is_rising:
