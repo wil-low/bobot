@@ -98,22 +98,18 @@ class AntyStrategy(bt.Strategy):
 
             slow_rising = False
             slow_falling = False
-            is_falling = False
-            is_rising = False
             signal = 0
             if fast_dir_changed and not_over:
                 slow_rising = AntyStrategy.is_rising(self.stoch[d].percD, self.params.trending_bars)
                 slow_falling = AntyStrategy.is_falling(self.stoch[d].percD, self.params.trending_bars)
-                is_falling = True #AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
-                is_rising = True  #AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
-                if slow_rising and fast_up and is_falling:
+                if slow_rising and fast_up:
                     signal = 1
-                elif slow_falling and not fast_up and is_rising:
+                elif slow_falling and not fast_up:
                     signal = -1
 
-            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d %d/%d %d/%d signal %d" %
+            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d %d/%d signal %d" %
                 (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], self.stoch[d].percK[0], self.stoch[d].percD[0],
-                fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, is_falling, is_rising, signal)
+                fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, signal)
             )
 
             if signal != 0:
@@ -124,7 +120,6 @@ class AntyStrategy(bt.Strategy):
                         (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
                         (d.ticker, order.ref, order.size, order.created.price))
-
                 elif signal == -1:
                     # go short
                     order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
@@ -132,4 +127,5 @@ class AntyStrategy(bt.Strategy):
                         (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
                         (d.ticker, order.ref, order.size, order.created.price))
-                            
+                    
+                return                            
