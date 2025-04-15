@@ -135,18 +135,18 @@ class DerivBroker(bt.broker.BrokerBase):
     def buy(self, owner=None, data=None, size=None, price=None, plimit=None,
             exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,
             trailpercent=None, parent=None, transmit=True, **kwargs):
-        self.log("Executing BUY (CALL)")
+        self.log("Executing BUY")
         return self.buy_contract(data.ticker, True, size)
 
     def sell(self, owner=None, data=None, size=None, price=None, plimit=None,
              exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,
              trailpercent=None, parent=None, transmit=True, **kwargs):
-        self.log("Executing SELL (PUT)")
+        self.log("Executing SELL")
         return self.buy_contract(data.ticker, False, size)
 
     def subscribe_positions(self):
         def get_portfolio():
-            self.log("get_portfolio")
+            #self.log("get_portfolio")
             msg = {
                 "portfolio": 1
             }

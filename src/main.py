@@ -28,6 +28,8 @@ def run_bot():
 
     logger.info("")
     logger.info("Starting strategy")
+    logger.debug(config)
+
     cerebro = bt.Cerebro()
 
     # Add live data feed
