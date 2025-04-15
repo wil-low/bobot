@@ -1,6 +1,6 @@
 # datafeed.py
 
-import collections
+import queue
 import os
 import traceback
 import backtrader as bt
@@ -30,7 +30,9 @@ class DerivLiveData(bt.feeds.DataBase):
         self.history_size = history_size
         self.granularity = granularity
         self.realtime_md = False
-        self.md = collections.deque()
+        self.md = queue.Queue()
+        self._last_candle = None
+        self._candle_consumed = True
         self.ohlc = {}
         self.ws = None
         self.thread = None
@@ -54,13 +56,14 @@ class DerivLiveData(bt.feeds.DataBase):
             }))
 
         def on_message(ws, message):
+            #print(f"datafeed: {message}")
             data = json.loads(message)
             if data['msg_type'] == 'candles':
                 # historical MD
                 self.log(data)
                 for candle in data['candles']:
                     self.ohlc['close'] = candle['close']
-                    self.md.append(candle)
+                    self.md.put(candle)
                 self.reset_ohlc()
                 ws.send(json.dumps({
                     "ticks": self.symbol,
@@ -72,7 +75,7 @@ class DerivLiveData(bt.feeds.DataBase):
                 self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
                 if self.ohlc['epoch'] % self.granularity == 0:
                     self.log(str(self.ohlc))
-                    self.md.append(self.ohlc)
+                    self.md.put(self.ohlc)
                     self.reset_ohlc()
                     self.realtime_md = True
 
@@ -96,12 +99,18 @@ class DerivLiveData(bt.feeds.DataBase):
 
     def _load(self):
         #self.log(f"_load {self.symbol}")
-        if len(self.md) == 0:
-            time.sleep(0.5)
-            return None
+        if self._candle_consumed:
+            try:
+                self._last_candle = self.md.get(timeout=0.1)
+                self._candle_consumed = False
+            except queue.Empty:
+                return None
 
-        c = self.md.popleft()
+        # Return same candle until Backtrader accepts it
+        c = self._last_candle
+
         #self.log(c)
+
         dt = datetime.fromtimestamp(c['epoch'], timezone.utc)
         self.lines.datetime[0] = bt.date2num(dt)
         self.lines.open[0] = float(c['open'])
@@ -112,6 +121,8 @@ class DerivLiveData(bt.feeds.DataBase):
 
         #dt = datetime.now(timezone.utc)
         #self.log(f"diff from now: {bt.date2num(dt)} - {self.lines.datetime[0]} = {bt.date2num(dt) - self.lines.datetime[0]}")
+
+        self._candle_consumed = True  # Only set to True after setting lines
         return True
 
     def keep_alive(self):
