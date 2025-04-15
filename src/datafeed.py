@@ -138,8 +138,8 @@ class DerivLiveData(bt.feeds.DataBase):
     def reset_ohlc(self):
         self.ohlc = {
             'open': self.ohlc['close'],
-            'high': None,
-            'low': None,
+            'high': self.ohlc['close'],
+            'low': self.ohlc['close'],
             'close': None
         }
 
