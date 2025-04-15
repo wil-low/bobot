@@ -77,6 +77,11 @@ class AntyStrategy(bt.Strategy):
         return all(data[-i - offset] < data[-i - 1 - offset] for i in range(0, n))
 
     def next(self):
+        # only have 1 position across all symbols
+        for i, d in enumerate(self.datas):
+            if self.getposition(d) is not None:
+                return
+
         for i, d in enumerate(self.datas):
             if d.volume == 0:
                 continue
@@ -104,24 +109,20 @@ class AntyStrategy(bt.Strategy):
                 fast_up, fast_dir_changed, not_over, slow_rising, slow_falling, is_falling, is_rising, signal)
             )
 
-            pos = self.getposition(d)
-            if pos is None:
-                #signal = 1
-                # Flat
-                if signal != 0:
-                    if signal == 1:
-                        # go long
-                        order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        print('BUY CREATE %s (%d), %.3f at %.3f' % 
-                            (d.ticker, order.ref, order.size, order.created.price))
-                        self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
-                            (d.ticker, order.ref, order.size, order.created.price))
+            if signal != 0:
+                if signal == 1:
+                    # go long
+                    order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                    print('BUY CREATE %s (%d), %.3f at %.3f' % 
+                        (d.ticker, order.ref, order.size, order.created.price))
+                    self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
+                        (d.ticker, order.ref, order.size, order.created.price))
 
-                    elif signal == -1:
-                        # go short
-                        order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        print('SELL CREATE %s (%d), %.3f at %.3f' % 
-                            (d.ticker, order.ref, order.size, order.created.price))
-                        self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
-                            (d.ticker, order.ref, order.size, order.created.price))
+                elif signal == -1:
+                    # go short
+                    order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                    print('SELL CREATE %s (%d), %.3f at %.3f' % 
+                        (d.ticker, order.ref, order.size, order.created.price))
+                    self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
+                        (d.ticker, order.ref, order.size, order.created.price))
                             
