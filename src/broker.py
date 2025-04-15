@@ -44,36 +44,40 @@ class DerivBroker(bt.broker.BrokerBase):
         def on_message(ws, message):
             #print(f"on_message: {message}")
             data = json.loads(message)
-            if data['msg_type'] == 'authorize':
-                self.log(f"on_message: {message}")
-                if "authorize" in data:
-                    self.cash = data['authorize']['balance']
-                    self.log(f"balance: {data['authorize']['balance']}")
-                    self.subscribe_positions()
-            elif data['msg_type'] == 'portfolio':
-                if "portfolio" in data:
-                    self.log(f"Positions: {len(data['portfolio']['contracts'])}")
-                    self.positions = {}
-                    for c in data['portfolio']['contracts']:
-                        p = bt.Position()
-                        #self.log(f"add position for: {c['symbol']}")
-                        self.positions[c['symbol']] = p
-                    self.is_ready = True
-                    ws.sock.ping()
-            elif data['msg_type'] == 'proposal':
-                self.log(f"on_message: {message}")
-                msg = {
-                    "buy": data['proposal']['id'],
-                    "price": 100000000000
-                }
-                if self.ws:
-                    self.ws.send(json.dumps(msg))
-                else:
-                    self.log("⚠️ WebSocket not connected")
             if "error" in data:
-                self.log("ERROR:", data["error"]["message"])
-            elif "buy" in data:
-                self.log(f"✅ Trade placed: {data['buy']['contract_id']}")
+                self.log(f"ERROR in {data['msg_type']}: {data["error"]["message"]}")
+            else:
+                if data['msg_type'] == 'authorize':
+                    self.log(f"on_message: {message}")
+                    if "authorize" in data:
+                        self.cash = data['authorize']['balance']
+                        self.log(f"balance: {data['authorize']['balance']}")
+                        self.subscribe_positions()
+                elif data['msg_type'] == 'portfolio':
+                    if "portfolio" in data:
+                        self.log(f"Positions: {len(data['portfolio']['contracts'])}")
+                        self.positions = {}
+                        for c in data['portfolio']['contracts']:
+                            self.add_position(c['symbol'], c['contract_type'] == 'CALL', c['buy_price'])
+                        self.is_ready = True
+                        ws.sock.ping()
+                elif data['msg_type'] == 'proposal':
+                    self.log(f"on_message: {message}")
+                    msg = {
+                        "buy": data['proposal']['id'],
+                        "price": 100000000000,
+                        "passthrough": {
+                            "symbol": data['echo_req']['symbol'],
+                            "contract_type": data['echo_req']['contract_type']
+                        }
+                    }
+                    if self.ws:
+                        self.ws.send(json.dumps(msg))
+                    else:
+                        self.log("⚠️ WebSocket not connected")
+                elif data['msg_type'] == 'buy':
+                    self.log(f"✅ Trade placed: {data['buy']['contract_id']}")
+                    self.add_position(data['passthrough']['symbol'], data['passthrough']['contract_type'] == 'CALL', data['buy_price'])
 
         def run_ws():
             print("run_ws")
@@ -99,6 +103,13 @@ class DerivBroker(bt.broker.BrokerBase):
             pass
 
         return None
+
+    def add_position(self, symbol, is_buy, price, size):
+        if not is_buy:
+            size = -size
+        p = bt.Position(size, price)
+        self.log(f"Add position for {symbol}: px {price}, size {size}")
+        self.positions[symbol] = p
 
     def buy_contract(self, symbol, is_buy, size):
         msg = {
