@@ -45,7 +45,7 @@ class DerivBroker(bt.broker.BrokerBase):
             #print(f"on_message: {message}")
             data = json.loads(message)
             if "error" in data:
-                self.log(f"ERROR in {data['msg_type']}: {data["error"]["message"]}")
+                self.log(f"ERROR in {data['msg_type']}: {data['error']['message']}")
             else:
                 if data['msg_type'] == 'authorize':
                     self.log(f"on_message: {message}")
