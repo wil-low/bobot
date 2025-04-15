@@ -58,7 +58,7 @@ class DerivBroker(bt.broker.BrokerBase):
                         self.log(f"Positions: {len(data['portfolio']['contracts'])}")
                         self.positions = {}
                         for c in data['portfolio']['contracts']:
-                            self.add_position(c['symbol'], c['contract_type'] == 'CALL', c['buy_price'])
+                            self.add_position(c['symbol'], c['contract_type'] == 'CALL', 1, c['buy_price'])
                         self.is_ready = True
                         ws.sock.ping()
                 elif data['msg_type'] == 'proposal':
@@ -77,7 +77,7 @@ class DerivBroker(bt.broker.BrokerBase):
                         self.log("⚠️ WebSocket not connected")
                 elif data['msg_type'] == 'buy':
                     self.log(f"✅ Trade placed: {data['buy']['contract_id']}")
-                    self.add_position(data['passthrough']['symbol'], data['passthrough']['contract_type'] == 'CALL', data['buy_price'])
+                    self.add_position(data['passthrough']['symbol'], data['passthrough']['contract_type'] == 'CALL', 1, data['buy_price'])
 
         def run_ws():
             print("run_ws")
