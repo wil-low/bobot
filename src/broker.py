@@ -2,12 +2,12 @@
 
 import collections
 import os
-import time
-import traceback
+from datetime import datetime, timezone
 import backtrader as bt
 import websocket
 import json
 import threading
+import csv
 
 class DerivBroker(bt.broker.BrokerBase):
     def log(self, txt, dt=None):
@@ -23,6 +23,9 @@ class DerivBroker(bt.broker.BrokerBase):
         self.logger = logger
         self.cash = 10000.0  # initial virtual balance
         self.is_ready = False
+        self.trades = []
+        self.trades_offset = 0
+        self.trades_limit = 50
         self.positions = {}
         self.order_id = 1
         self.app_id = app_id
@@ -78,6 +81,15 @@ class DerivBroker(bt.broker.BrokerBase):
                 elif data['msg_type'] == 'buy':
                     self.log(f"✅ Trade placed: {data['buy']['contract_id']}")
                     self.add_position(data['passthrough']['symbol'], data['passthrough']['contract_type'] == 'CALL', 1, data['buy']['buy_price'])
+                elif data['msg_type'] == 'profit_table':
+                    self.log(f"on_message: {message}")
+                    for t in data['profit_table']['transactions']:
+                        self.trades.append(t)
+                    if data['profit_table']['count'] > 0:
+                        self.trades_offset += self.trades_limit
+                        self.get_trades_chunk()
+                    else:
+                        self.write_trades_csv()
 
         def run_ws():
             print("run_ws")
@@ -183,3 +195,44 @@ class DerivBroker(bt.broker.BrokerBase):
         # First call to start the periodic checks
         start_get_portfolio()
 
+    def get_trades(self, date_from, date_to):
+        self.is_ready = False
+        self.trades = []
+        self.trades_offset = 0
+        self.trades_from = date_from
+        self.trades_to = date_to
+        self.get_trades_chunk()
+
+    def get_trades_chunk(self):
+        msg = {
+            "profit_table": 1,
+            "description": 1,
+            "limit": self.trades_limit,
+            "offset": self.trades_offset,
+            "sort": "ASC",
+            "date_from": self.trades_from,
+            "date_to": self.trades_to
+        }
+        self.log(msg)
+        if self.ws:
+            self.ws.send(json.dumps(msg))
+        else:
+            self.log("⚠️ WebSocket not connected")
+
+    def write_trades_csv(self):
+        # Convert Unix timestamps to human-readable format
+        for trade in self.trades:
+            trade["purchase_time"] = datetime.fromtimestamp(trade["purchase_time"], timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+            trade["sell_time"] = datetime.fromtimestamp(trade["sell_time"], timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+        # Output file name
+        output_file = "analysis/csv/deriv_export.csv"
+
+        # Write to CSV
+        with open(output_file, mode="w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=self.trades[0].keys())
+            writer.writeheader()
+            writer.writerows(self.trades)
+
+        print(f"Total {len(self.trades)} trades. CSV file saved as: {output_file}")
+        self.is_ready = True
