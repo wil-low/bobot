@@ -246,7 +246,7 @@ class BinaryOptionsBroker(bt.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, payout=1.8, stake=10):
+    def __init__(self, logger, payout=1.8, stake=10, csv_file="analysis/csv/deriv_backtest.csv"):
         super().__init__()
         self.logger = logger
         self.order_id = 1
@@ -255,6 +255,10 @@ class BinaryOptionsBroker(bt.BrokerBase):
         self.stake = stake
         self.open_contracts = []
         self.notifs = collections.deque()
+        self.csv_file = csv_file
+        
+        # Initialize CSV file with header if it doesn't exist
+        self._initialize_csv()
 
     def start(self):
         self.cash = 10000
@@ -335,6 +339,7 @@ class BinaryOptionsBroker(bt.BrokerBase):
             'symbol': symbol,
             'data': data,
             'direction': direction,
+            'entry_time': dt,
             'entry_price': entry_price,
             'expiry': expiry,
             'stake': stake,
@@ -379,19 +384,32 @@ class BinaryOptionsBroker(bt.BrokerBase):
                     contract['direction'] == 'PUT' and current_price < contract['entry_price']
                 )
 
+                # Debugging PnL calculation and logic
+                #self.log(f"Processing contract {contract['direction']} at {now}. Entry: {contract['entry_price']}, Current Price: {current_price}, Won: {won}")
+
+                contract_sell_price = 0
                 if won:
-                    pnl = contract['stake'] * (self.payout - 1)
-                    self.cash += contract['stake'] * self.payout
+                    pnl = contract['stake'] * (self.payout - 1)  # Positive PnL for winning
+                    contract_sell_price = contract['stake'] * self.payout
+                    self.cash += contract_sell_price
+                    #self.log(f"Won contract. PnL: {pnl}, Cash after win: {self.cash}")
                 else:
-                    pnl = -contract['stake']
+                    pnl = -contract['stake']  # Negative PnL for losing
+                    self.cash -= contract['stake']  # Subtract the stake
+                    #self.log(f"Lost contract. PnL: {pnl}, Cash after loss: {self.cash}")
 
-                self.log(f"Expired contract {data.ticker}, won={won}, cash={self.cash}, pnl={pnl}")
+                # Log the trade details before it's completed
+                self.log(f"Expired contract {data.ticker} {contract['direction']}, Won: {won}, PnL: {pnl}, Cash: {self.cash}")
 
+                # Write to CSV when contract expires
+                self._write_contract_to_csv(contract, won, contract_sell_price)
+                
                 order = contract['order']
                 data = contract['data']
                 comminfo = self.getcommissioninfo(order.data)
 
-                exit_order = bt.SellOrder(owner=order.owner, data=data, size=-order.size) if order.isbuy() else bt.BuyOrder(owner=order.owner, data=data, size=-order.size)
+                # Handle exit order
+                exit_order = bt.SellOrder(owner=order.owner, data=data, size=order.size) if order.isbuy() else bt.BuyOrder(owner=order.owner, data=data, size=-order.size)
                 exit_order.ref = self.order_id
                 self.order_id += 1
                 exit_order.parent = order  # Link back to the entry order
@@ -416,6 +434,7 @@ class BinaryOptionsBroker(bt.BrokerBase):
         for c in resolved:
             self.open_contracts.remove(c)
 
+
     def notify(self, order):
         self.notifs.append(order.clone())
 
@@ -426,3 +445,38 @@ class BinaryOptionsBroker(bt.BrokerBase):
             pass
 
         return None
+
+    def _initialize_csv(self):
+        # Create CSV file and write the header
+        with open(self.csv_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([
+                'app_id', 'buy_price', 'contract_id', 'contract_type', 'duration_type',
+                'longcode', 'payout', 'purchase_time', 'sell_price', 'sell_time',
+                'shortcode', 'transaction_id', 'underlying_symbol'
+            ])
+
+    def _write_contract_to_csv(self, contract, won, sell_price):
+        # Prepare row to be written to CSV
+        entry_time = contract['entry_time'].strftime('%Y-%m-%d %H:%M:%S')
+        expiry_time = contract['expiry'].strftime('%Y-%m-%d %H:%M:%S')
+        row = [
+            1,  # Example app_id
+            contract['stake'],  # Buy price
+            contract['order'].ref,  # Contract ID
+            contract['direction'],  # Contract Type (CALL/PUT)
+            'minutes',  # Duration Type
+            f"Win payout if {contract['data'].ticker} is strictly {'higher' if contract['direction'] == 'CALL' else 'lower'} than entry spot at 15 minutes after contract start time.",
+            self.payout * contract['stake'],  # Payout
+            entry_time,  # Purchase time
+            sell_price,  # Sell price (if applicable)
+            expiry_time,  # Sell time (expiry time)
+            f"{contract['direction']}_{contract['data'].ticker}_{self.payout}_{contract['order'].ref}",  # Shortcode
+            contract['order'].ref,  # Transaction ID
+            contract['data'].ticker  # Underlying symbol
+        ]
+        
+        # Write row to CSV
+        with open(self.csv_file, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(row)

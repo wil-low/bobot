@@ -67,8 +67,8 @@ class AntyStrategy(bt.Strategy):
         #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
         if not trade.isclosed:
             return
-        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
-                 (trade.pnl, trade.pnlcomm))
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
 
     @staticmethod
     def is_rising(data, n, offset=0):
