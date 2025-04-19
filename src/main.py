@@ -8,7 +8,7 @@ from loguru import logger  # pip install loguru
 
 from broker import DerivBroker
 from datafeed import DerivLiveData
-from strategy import AntyStrategy
+from strategy import AntyStrategy, RSIPowerZonesStrategy
 
 def run_bot():
     config = {}
@@ -28,7 +28,10 @@ def run_bot():
 
     logger.info("")
     logger.info("Starting strategy")
-    logger.debug(config)
+
+    config_tmp = config.copy()
+    del config_tmp['auth']
+    logger.debug(f"Config params: {config_tmp}")
 
     cerebro = bt.Cerebro()
 
@@ -46,9 +49,12 @@ def run_bot():
         time.sleep(0.5)
 
     # Add strategy
-    cerebro.addstrategy(AntyStrategy, stake=config['trade']['stake'], logger=logger)
+    if config["strategy"]["name"] == 'RSIPowerZones':
+        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, stake=config['trade']['stake'])
+    elif config["strategy"]["name"] == 'Anty':
+        cerebro.addstrategy(AntyStrategy, logger=logger, stake=config['trade']['stake'])
 
-    print("🔁 Starting live Deriv bot...")
+    print(f"🔁 Starting live strategy {config["strategy"]["name"]}...")
     cerebro.run()
 
 if __name__ == '__main__':

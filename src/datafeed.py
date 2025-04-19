@@ -58,26 +58,30 @@ class DerivLiveData(bt.feeds.DataBase):
         def on_message(ws, message):
             #print(f"datafeed: {message}")
             data = json.loads(message)
-            if data['msg_type'] == 'candles':
-                # historical MD
-                self.log(data)
-                for candle in data['candles']:
-                    self.ohlc['close'] = candle['close']
-                    self.md.put(candle)
-                self.reset_ohlc()
-                ws.send(json.dumps({
-                    "ticks": self.symbol,
-                    "subscribe": 1
-                }))
-            elif data['msg_type'] == 'tick':
-                # real-time MD
-                #self.log(data)
-                self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
-                if self.ohlc['epoch'] % self.granularity == 0:
-                    self.log(str(self.ohlc))
-                    self.md.put(self.ohlc)
+            if "error" in data:
+                self.log(f"ERROR in {data['msg_type']}: {data['error']['message']}")
+            else:
+                if data['msg_type'] == 'candles':
+                    # historical MD
+                    self.log(data)
+                    self.log(f"Historical candles: {len(data['candles'])}")
+                    for candle in data['candles']:
+                        self.ohlc['close'] = candle['close']
+                        self.md.put(candle)
                     self.reset_ohlc()
-                    self.realtime_md = True
+                    ws.send(json.dumps({
+                        "ticks": self.symbol,
+                        "subscribe": 1
+                    }))
+                elif data['msg_type'] == 'tick':
+                    # real-time MD
+                    #self.log(data)
+                    self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
+                    if self.ohlc['epoch'] % self.granularity == 0:
+                        self.log(str(self.ohlc))
+                        self.md.put(self.ohlc)
+                        self.reset_ohlc()
+                        self.realtime_md = True
 
         def on_error(ws, message):
             self.log(f"[DerivLiveData] on_error: {str(message)}")
