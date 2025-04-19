@@ -176,3 +176,5 @@ cython_debug/
 cfg/*
 !cfg/*_sample.json
 datasets/
+analysis/images
+analysis/csv

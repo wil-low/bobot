@@ -1,5 +1,6 @@
 # strategy.py
 
+import json
 import backtrader as bt
 
 class AntyStrategy(bt.Strategy):
@@ -82,9 +83,9 @@ class AntyStrategy(bt.Strategy):
 
     def next(self):
         # only have 1 position across all symbols
-        for i, d in enumerate(self.datas):
-            if self.getposition(d) is not None:
-                return
+        #for i, d in enumerate(self.datas):
+        #    if self.getposition(d) is not None:
+        #        return
 
         for i, d in enumerate(self.datas):
             if d.volume == 0:
@@ -139,3 +140,109 @@ class AntyStrategy(bt.Strategy):
                         (d.ticker, order.ref, order.size, order.created.price))
                     
                 return                            
+
+
+class RSIPowerZonesStrategy(bt.Strategy):
+    params = (
+        ('stake', 1),
+        ('enable_short', False),
+        ('ma_period', 200),
+        ('rsi_period', 4),
+        ('rsi_long_1st', 30),
+        ('rsi_long_2nd', 25),
+        ('rsi_short_1st', 70),
+        ('rsi_short_2nd', 75),
+        ('logger', None),
+        ('leverage', None),
+        ('min_hour', 17),
+        ('max_hour', 18),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        dt = dt or self.data.datetime.date(0)
+        if self.params.logger:
+            self.params.logger.debug('%-06s: %s' % (data.ticker, txt))
+        else:
+            print('%-06s: %s' % (data.ticker, txt))
+
+    def __init__(self):
+        # To keep track of pending orders and buy price/commission
+        self.o = dict()
+        self.pos_units = dict()
+        self.sma = dict()
+        self.rsi = dict()
+        param_dict = dict(self.params._getitems())
+        json_params = json.dumps(param_dict)
+        self.params.logger.debug(f"Strategy params: {json_params}")
+
+        for d in self.datas:
+            self.sma[d] = bt.indicators.SimpleMovingAverage(d, period=self.params.ma_period)
+            self.rsi[d] = bt.indicators.RSI_Safe(d, period=self.params.rsi_period)
+
+    def notify_order(self, order):
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f' %
+                    (order.executed.price,
+                    order.executed.value,
+                    order.executed.comm))
+
+            else:  # Sell
+                self.log(order.data, 'SELL EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f' %
+                        (order.executed.price,
+                        order.executed.value,
+                        order.executed.comm))
+
+            self.bar_executed = len(self)
+
+        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+            self.log(order.data, 'Order Canceled/Margin/Rejected')
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+                 (trade.pnl, trade.pnlcomm))
+
+    def next(self):
+        if self.broker.getcash() < self.params.stake:
+            return
+        # Simply log the closing price of the series from the reference
+        for i, d in enumerate(self.datas):
+            if d.volume == 0:
+                continue
+            if d.datetime.datetime(0).hour < self.params.min_hour or d.datetime.datetime(0).hour >= self.params.max_hour:
+                continue
+            self.log(d, '%s: Close: %.6f, SMA %.6f, RSI %.2f' % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d][0], self.rsi[d][0]))
+
+            pos = self.getposition(d)
+            #self.log(f"Position: {pos}")
+
+            # Check if we are in the market
+            if not pos:
+                if d.close[0] > self.sma[d][0]:  # uptrend
+                    if self.rsi[d][0] < self.params.rsi_long_2nd:
+                        self.order = self.buy(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
+                        self.pos_units[d] = 1
+                        self.log(d, 'BUY CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                    elif self.rsi[d][0] < self.params.rsi_long_1st:
+                        self.order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                        self.pos_units[d] = 1
+                        self.log(d, 'BUY CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                elif self.params.enable_short:  # downtrend
+                    if self.rsi[d][0] > self.params.rsi_short_2nd:
+                        self.order = self.sell(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
+                        self.pos_units[d] = 1
+                        self.log(d, 'SELL CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                    elif self.rsi[d][0] > self.params.rsi_short_1st:
+                        self.order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                        self.pos_units[d] = 1
+                        self.log(d, 'SELL CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))

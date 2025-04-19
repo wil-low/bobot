@@ -9,7 +9,7 @@ from loguru import logger  # pip install loguru
 
 from broker import BinaryOptionsBroker
 from datafeed import HistDataCSVData
-from strategy import AntyStrategy
+from strategy import AntyStrategy, RSIPowerZonesStrategy
 
 def logged_print(message):
     logger.info(message)
@@ -61,7 +61,10 @@ def run_bot():
 
     logger.info("")
     logger.info("Starting strategy for backtest")
-    logger.debug(config)
+
+    config_tmp = config.copy()
+    del config_tmp['auth']
+    logger.debug(f"Config params: {config_tmp}")
 
     cerebro = bt.Cerebro()
 
@@ -69,21 +72,24 @@ def run_bot():
     for symbol in config['feed']['tickers']:
         symbol = symbol.replace('frx', '')
         data = HistDataCSVData(
-            dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_2023.csv',
+            dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
             # Do not pass values before this date
             #fromdate=datetime.datetime(2005, 1, 1),
             # Do not pass values after this date
-            todate=datetime(2023, 2, 27),
+            #todate=datetime(2023, 2, 27),
         )
         data.ticker = symbol
         cerebro.resampledata(data, timeframe=tf, compression=compression)
 
     # Add broker (Deriv WebSocket trader)
-    broker = BinaryOptionsBroker(logger=logger)
+    broker = BinaryOptionsBroker(logger=logger, cash=config['trade']['cash'], contract_expiration_min=config['trade']['expiration_min'])
     cerebro.setbroker(broker)
 
     # Add strategy
-    cerebro.addstrategy(AntyStrategy, stake=config['trade']['stake'], logger=logger)
+    if config["strategy"]["name"] == 'RSIPowerZones':
+        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, stake=config['trade']['stake'])
+    elif config["strategy"]["name"] == 'Anty':
+        cerebro.addstrategy(AntyStrategy, logger=logger, stake=config['trade']['stake'])
 
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')

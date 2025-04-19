@@ -246,13 +246,15 @@ class BinaryOptionsBroker(bt.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, payout=1.8, stake=10, csv_file="analysis/csv/deriv_backtest.csv"):
+    def __init__(self, logger, payout=1.8, stake=10, cash=10000, contract_expiration_min = 15, csv_file="analysis/csv/deriv_backtest.csv"):
         super().__init__()
         self.logger = logger
         self.order_id = 1
         self.positions = {}
         self.payout = payout
         self.stake = stake
+        self.cash = cash
+        self.contract_expiration_min = contract_expiration_min
         self.open_contracts = []
         self.notifs = collections.deque()
         self.csv_file = csv_file
@@ -261,7 +263,6 @@ class BinaryOptionsBroker(bt.BrokerBase):
         self._initialize_csv()
 
     def start(self):
-        self.cash = 10000
         self.value = self.cash
         self.startingcash = self.cash
 
@@ -324,8 +325,7 @@ class BinaryOptionsBroker(bt.BrokerBase):
         dt = data.datetime.datetime(0)
         symbol = data.ticker
 
-        # Default expiry = 15 minutes unless overridden
-        expiry = dt + timedelta(minutes=15)
+        expiry = dt + timedelta(minutes=self.contract_expiration_min)
         if order.valid is not None:
             delta_days = order.valid - bt.date2num(dt)
             expiry = dt + timedelta(days=delta_days)
@@ -395,7 +395,6 @@ class BinaryOptionsBroker(bt.BrokerBase):
                     #self.log(f"Won contract. PnL: {pnl}, Cash after win: {self.cash}")
                 else:
                     pnl = -contract['stake']  # Negative PnL for losing
-                    self.cash -= contract['stake']  # Subtract the stake
                     #self.log(f"Lost contract. PnL: {pnl}, Cash after loss: {self.cash}")
 
                 # Log the trade details before it's completed
