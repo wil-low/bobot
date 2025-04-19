@@ -4,15 +4,21 @@
     },
     "auth": {
         "account_id": "<APP_ID>",
-        "api_key": "<APP_KEY>"
+        "api_key": "<APP_KEY>",
+        "bot_token": "<BOT_TOKEN>",
+        "channel_id": "<CHANNEL_ID>"
     },
     "trade": {
+        "send_signals": false,
+        "send_orders": true,
+        "cash": 100,
         "stake": 10,
         "expiration_min": 15
     },
     "feed": {
         "history_size": 30,
         "timeframe_sec": 300,
+        "year": 2024,
         "tickers": [
             "WLDEUR"
         ],

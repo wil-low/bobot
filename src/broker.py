@@ -3,6 +3,8 @@
 import collections
 import os
 from datetime import datetime, timezone, timedelta
+
+import requests
 import backtrader as bt
 import websocket
 import json
@@ -18,7 +20,7 @@ class DerivBroker(bt.broker.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, app_id, api_token, contract_expiration_min):
+    def __init__(self, logger, app_id, api_token, contract_expiration_min, bot_token, channel_id):
         super().__init__()
         self.logger = logger
         self.cash = 10000.0  # initial virtual balance
@@ -31,6 +33,8 @@ class DerivBroker(bt.broker.BrokerBase):
         self.app_id = app_id
         self.api_token = api_token
         self.contract_expiration_min = contract_expiration_min
+        self.bot_token = bot_token
+        self.channel_id = channel_id
         self.ws = None
         self.notifs = collections.deque()
         self._connect()
@@ -236,6 +240,19 @@ class DerivBroker(bt.broker.BrokerBase):
 
         print(f"Total {len(self.trades)} trades. CSV file saved as: {output_file}")
         self.is_ready = True
+
+    def post_message(self, message):
+        if self.bot_token is not None and self.channel_id is not None:
+            url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
+            payload = {
+                'chat_id': self.channel_id,
+                'text': message,
+                'disable_notification': True,
+                'disable_web_page_preview': True
+            }
+            response = requests.post(url, data=payload)
+            self.log(f"post_message: {response.json()}")
+
 
 class BinaryOptionsBroker(bt.BrokerBase):
     def log(self, txt, dt=None):
@@ -479,3 +496,6 @@ class BinaryOptionsBroker(bt.BrokerBase):
         with open(self.csv_file, mode='a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(row)
+
+    def post_message(self, message):
+        pass

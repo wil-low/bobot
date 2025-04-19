@@ -1,12 +1,13 @@
 # strategy.py
 
+from datetime import datetime
 import json
 import backtrader as bt
 
 class AntyStrategy(bt.Strategy):
     params = (
+        ('trade', {}),
         ('trending_bars', 3),
-        ('stake', 1),
         ('overbought', 20),
         ('oversold', 80),
         ('require_fast_trend', False),
@@ -126,14 +127,14 @@ class AntyStrategy(bt.Strategy):
             if signal != 0:
                 if signal == 1:
                     # go long
-                    order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                    order = self.buy(data=d, size=self.params.trade['stake'], exectype=bt.Order.Market)
                     #print('BUY CREATE %s (%d), %.3f at %.3f' % 
                     #    (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
                         (d.ticker, order.ref, order.size, order.created.price))
                 elif signal == -1:
                     # go short
-                    order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
+                    order = self.sell(data=d, size=self.params.trade['stake'], exectype=bt.Order.Market)
                     #print('SELL CREATE %s (%d), %.3f at %.3f' % 
                     #    (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
@@ -144,8 +145,8 @@ class AntyStrategy(bt.Strategy):
 
 class RSIPowerZonesStrategy(bt.Strategy):
     params = (
-        ('stake', 1),
-        ('enable_short', False),
+        ('trade', {}),
+        ('enable_short', True),
         ('ma_period', 200),
         ('rsi_period', 4),
         ('rsi_long_1st', 30),
@@ -154,22 +155,21 @@ class RSIPowerZonesStrategy(bt.Strategy):
         ('rsi_short_2nd', 75),
         ('logger', None),
         ('leverage', None),
-        ('min_hour', 17),
-        ('max_hour', 18),
+        ('min_hour', 0),
+        ('max_hour', 24),
     )
 
     def log(self, data, txt, dt=None):
         ''' Logging function for this strategy'''
         dt = dt or self.data.datetime.date(0)
         if self.params.logger:
-            self.params.logger.debug('%-06s: %s' % (data.ticker, txt))
+            self.params.logger.debug('%-10s: %s' % (data.ticker, txt))
         else:
-            print('%-06s: %s' % (data.ticker, txt))
+            print('%-10s: %s' % (data.ticker, txt))
 
     def __init__(self):
         # To keep track of pending orders and buy price/commission
         self.o = dict()
-        self.pos_units = dict()
         self.sma = dict()
         self.rsi = dict()
         param_dict = dict(self.params._getitems())
@@ -213,7 +213,7 @@ class RSIPowerZonesStrategy(bt.Strategy):
                  (trade.pnl, trade.pnlcomm))
 
     def next(self):
-        if self.broker.getcash() < self.params.stake:
+        if self.broker.getcash() < self.params.trade['stake']:
             return
         # Simply log the closing price of the series from the reference
         for i, d in enumerate(self.datas):
@@ -230,19 +230,32 @@ class RSIPowerZonesStrategy(bt.Strategy):
             if not pos:
                 if d.close[0] > self.sma[d][0]:  # uptrend
                     if self.rsi[d][0] < self.params.rsi_long_2nd:
-                        self.order = self.buy(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
-                        self.pos_units[d] = 1
-                        self.log(d, 'BUY CREATE, %.2f at %.6f (DOUBLE)\n' % (self.order.size, d.close[0]))
+                        self.send_order(d, False, True)
                     elif self.rsi[d][0] < self.params.rsi_long_1st:
-                        self.order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        self.pos_units[d] = 1
-                        self.log(d, 'BUY CREATE, %.2f at %.6f\n' % (self.order.size, d.close[0]))
+                        self.send_order(d, False, False)
                 elif self.params.enable_short:  # downtrend
                     if self.rsi[d][0] > self.params.rsi_short_2nd:
-                        self.order = self.sell(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
-                        self.pos_units[d] = 1
-                        self.log(d, 'SELL CREATE, %.2f at %.6f (DOUBLE)\n' % (self.order.size, d.close[0]))
+                        self.send_order(d, True, True)
                     elif self.rsi[d][0] > self.params.rsi_short_1st:
-                        self.order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                        self.pos_units[d] = 1
-                        self.log(d, 'SELL CREATE, %.2f at %.6f\n' % (self.order.size, d.close[0]))
+                        self.send_order(d, True, False)
+
+    def send_order(self, data, is_sell, is_double):
+        side = 'ВВЕРХ'
+        side_icon = '⬆️'
+        if is_sell:
+            side = 'ВНИЗ'
+            side_icon = '⬇️'
+        size = self.params.trade['stake']
+        double_str = ''
+        if is_double:
+            size *= 2
+            double_str = 'УДВОИТЬ'
+        if self.params.trade['send_orders']:
+            if is_sell:
+                self.order = self.sell(data=data, size=size, exectype=bt.Order.Market)
+            else:
+                self.order = self.buy(data=data, size=size, exectype=bt.Order.Market)
+            self.log(data, '%s CREATE, %.2f at %.6f %s\n' % (side, self.order.size, data.close[0], double_str))
+        if self.params.trade['send_signals']:
+            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ({self.params.trade['expiration_min']} мин)    {data.ticker}    {side_icon}    {side}    {double_str}"
+            self.broker.post_message(message)

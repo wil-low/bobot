@@ -42,7 +42,14 @@ def run_bot():
         cerebro.adddata(data)
 
     # Add broker (Deriv WebSocket trader)
-    broker = DerivBroker(logger=logger, app_id=config['auth']['account_id'], api_token=config['auth']['api_key'], contract_expiration_min=config['trade']['expiration_min'])
+    broker = DerivBroker(
+        logger=logger,
+        app_id=config['auth']['account_id'],
+        api_token=config['auth']['api_key'],
+        contract_expiration_min=config['trade']['expiration_min'],
+        bot_token=config['auth']['bot_token'],
+        channel_id=config['auth']['channel_id']
+    )
     cerebro.setbroker(broker)
 
     while not broker.ready():
@@ -50,9 +57,9 @@ def run_bot():
 
     # Add strategy
     if config["strategy"]["name"] == 'RSIPowerZones':
-        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, stake=config['trade']['stake'])
+        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'Anty':
-        cerebro.addstrategy(AntyStrategy, logger=logger, stake=config['trade']['stake'])
+        cerebro.addstrategy(AntyStrategy, logger=logger, trade=config['trade'])
 
     print(f"🔁 Starting live strategy {config['strategy']['name']}...")
     cerebro.run()
