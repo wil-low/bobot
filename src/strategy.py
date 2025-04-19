@@ -232,17 +232,17 @@ class RSIPowerZonesStrategy(bt.Strategy):
                     if self.rsi[d][0] < self.params.rsi_long_2nd:
                         self.order = self.buy(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
                         self.pos_units[d] = 1
-                        self.log(d, 'BUY CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                        self.log(d, 'BUY CREATE, %.2f at %.6f (DOUBLE)\n' % (self.order.size, d.close[0]))
                     elif self.rsi[d][0] < self.params.rsi_long_1st:
                         self.order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
                         self.pos_units[d] = 1
-                        self.log(d, 'BUY CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                        self.log(d, 'BUY CREATE, %.2f at %.6f\n' % (self.order.size, d.close[0]))
                 elif self.params.enable_short:  # downtrend
                     if self.rsi[d][0] > self.params.rsi_short_2nd:
                         self.order = self.sell(data=d, size=self.params.stake * 2, exectype=bt.Order.Market)
                         self.pos_units[d] = 1
-                        self.log(d, 'SELL CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                        self.log(d, 'SELL CREATE, %.2f at %.6f (DOUBLE)\n' % (self.order.size, d.close[0]))
                     elif self.rsi[d][0] > self.params.rsi_short_1st:
                         self.order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
                         self.pos_units[d] = 1
-                        self.log(d, 'SELL CREATE, %.2f at %.6f' % (self.order.size, d.close[0]))
+                        self.log(d, 'SELL CREATE, %.2f at %.6f\n' % (self.order.size, d.close[0]))
