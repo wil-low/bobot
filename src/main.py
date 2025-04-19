@@ -54,7 +54,7 @@ def run_bot():
     elif config["strategy"]["name"] == 'Anty':
         cerebro.addstrategy(AntyStrategy, logger=logger, stake=config['trade']['stake'])
 
-    print(f"🔁 Starting live strategy {config["strategy"]["name"]}...")
+    print(f"🔁 Starting live strategy {config['strategy']['name']}...")
     cerebro.run()
 
 if __name__ == '__main__':

@@ -96,7 +96,7 @@ def run_bot():
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
     cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
 
-    print(f"🔁 Starting backtest strategy {config["strategy"]["name"]}...")
+    print(f"🔁 Starting backtest strategy {config['strategy']['name']}...")
     result = cerebro.run()
 
     logged_print(f"Sharpe Ratio: {result[0].analyzers.sharpe.get_analysis()['sharperatio']}")
