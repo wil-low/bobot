@@ -175,3 +175,4 @@ cython_debug/
 
 cfg/*
 !cfg/*_sample.json
+datasets/

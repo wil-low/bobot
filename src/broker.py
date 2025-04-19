@@ -2,7 +2,7 @@
 
 import collections
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import backtrader as bt
 import websocket
 import json
@@ -236,3 +236,193 @@ class DerivBroker(bt.broker.BrokerBase):
 
         print(f"Total {len(self.trades)} trades. CSV file saved as: {output_file}")
         self.is_ready = True
+
+class BinaryOptionsBroker(bt.BrokerBase):
+    def log(self, txt, dt=None):
+        ''' Logging function for this broker'''
+        ticker = '<broker>'
+        if self.logger:
+            self.logger.debug('%-10s: %s' % (ticker, txt))
+        else:
+            print('%-10s: %s' % (ticker, txt))
+
+    def __init__(self, logger, payout=1.8, stake=10):
+        super().__init__()
+        self.logger = logger
+        self.order_id = 1
+        self.positions = {}
+        self.payout = payout
+        self.stake = stake
+        self.open_contracts = []
+        self.notifs = collections.deque()
+
+    def start(self):
+        self.cash = 10000
+        self.value = self.cash
+        self.startingcash = self.cash
+
+    def getcash(self):
+        return self.cash
+
+    def getvalue(self):
+        return self.cash
+
+    def getposition(self, data):
+        #self.log(f"getposition for {data.ticker}")
+        return self.positions.get(data)
+
+    def buy(self, owner=None, data=None, size=None, price=None, plimit=None,
+            exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,
+            trailpercent=None, parent=None, transmit=True, **kwargs):
+        self.log("Executing BUY")
+        # Create the buy order
+        order = bt.BuyOrder(
+            owner=owner,
+            data=data,
+            size=size, 
+            price=price, 
+            exectype=exectype, 
+            valid=valid,
+            parent=parent
+        )
+        order.owner = owner
+        order.data = data
+        order.ref = self.order_id
+        self.order_id += 1
+
+        self.submit(order)  # Submit the order to the broker
+        return order
+
+    def sell(self, owner=None, data=None, size=None, price=None, plimit=None,
+             exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,
+             trailpercent=None, parent=None, transmit=True, **kwargs):
+        self.log("Executing SELL")
+        # Create the sell order
+        order = bt.SellOrder(
+            owner=owner,
+            data=data,
+            size=size, 
+            price=price, 
+            exectype=exectype, 
+            valid=valid,
+            parent=parent
+        )
+        order.owner = owner
+        order.data = data
+        order.ref = self.order_id
+        self.order_id += 1
+
+        self.submit(order)  # Submit the order to the broker
+        return order
+
+    def submit(self, order):
+        data = order.data
+        dt = data.datetime.datetime(0)
+        symbol = data.ticker
+
+        # Default expiry = 15 minutes unless overridden
+        expiry = dt + timedelta(minutes=15)
+        if order.valid is not None:
+            delta_days = order.valid - bt.date2num(dt)
+            expiry = dt + timedelta(days=delta_days)
+
+        entry_price = data.close[0]
+        direction = 'CALL' if order.isbuy() else 'PUT'
+
+        stake = abs(order.size)  # Get stake from order quantity
+
+        contract = {
+            'symbol': symbol,
+            'data': data,
+            'direction': direction,
+            'entry_price': entry_price,
+            'expiry': expiry,
+            'stake': stake,
+            'order': order,
+        }
+
+        self.cash -= stake
+        self.open_contracts.append(contract)
+
+        p = bt.Position(order.size, 1)
+        p.adjbase = 1
+        self.log(f"Add position for {symbol}: px {entry_price}, size {order.size}")
+        self.positions[data] = p
+
+        comminfo = self.getcommissioninfo(order.data)
+        order.execute(
+            data, order.size, 1,
+            0, 0, 0,
+            order.size, order.size, 0,
+            comminfo.margin, 0,
+            0, 0)
+        
+        order.completed()
+        order.addcomminfo(comminfo)
+
+        # Store a notification for the order
+        self.notify(order)
+
+    def next(self):
+        # Iterate over all data streams passed into the broker
+        resolved = []
+        for contract in self.open_contracts:
+            data = contract['data']
+            # The date for the current bar
+            now = bt.num2date(data.datetime[0])
+
+            if now >= contract['expiry']:
+                current_price = data.close[0]
+                won = (
+                    contract['direction'] == 'CALL' and current_price > contract['entry_price']
+                ) or (
+                    contract['direction'] == 'PUT' and current_price < contract['entry_price']
+                )
+
+                if won:
+                    pnl = contract['stake'] * (self.payout - 1)
+                    self.cash += contract['stake'] * self.payout
+                else:
+                    pnl = -contract['stake']
+
+                self.log(f"Expired contract {data.ticker}, won={won}, cash={self.cash}, pnl={pnl}")
+
+                order = contract['order']
+                data = contract['data']
+                comminfo = self.getcommissioninfo(order.data)
+
+                exit_order = bt.SellOrder(owner=order.owner, data=data, size=-order.size) if order.isbuy() else bt.BuyOrder(owner=order.owner, data=data, size=-order.size)
+                exit_order.ref = self.order_id
+                self.order_id += 1
+                exit_order.parent = order  # Link back to the entry order
+
+                exit_price = data.close[0]
+
+                exit_order.execute(
+                    data, exit_order.size, exit_price,
+                    exit_order.size, exit_price, 0,
+                    0, 0, 0,
+                    comminfo.margin, pnl,
+                    0, 0
+                )
+
+                exit_order.completed()
+                exit_order.addcomminfo(comminfo)
+                self.notify(exit_order)
+                self.positions[data] = None
+
+                resolved.append(contract)
+
+        for c in resolved:
+            self.open_contracts.remove(c)
+
+    def notify(self, order):
+        self.notifs.append(order.clone())
+
+    def get_notification(self):
+        try:
+            return self.notifs.popleft()
+        except IndexError:
+            pass
+
+        return None

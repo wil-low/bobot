@@ -27,7 +27,7 @@ class AntyStrategy(bt.Strategy):
         self.o = dict()
         self.stoch = dict()
         for d in self.datas:
-            self.stoch[d] = bt.indicators.Stochastic(d, period=7, period_dfast=4, period_dslow=10)
+            self.stoch[d] = bt.indicators.Stochastic(d, period=7, period_dfast=4, period_dslow=10, safediv=True)
 
     def notify_order(self, order):
         #self.log(order.data, f"notify_order: {str(order)}")
@@ -64,6 +64,7 @@ class AntyStrategy(bt.Strategy):
             self.log(order.data, 'Order (%d) Rejected' % order.ref)
 
     def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
         if not trade.isclosed:
             return
         self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
@@ -125,15 +126,15 @@ class AntyStrategy(bt.Strategy):
                 if signal == 1:
                     # go long
                     order = self.buy(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                    print('BUY CREATE %s (%d), %.3f at %.3f' % 
-                        (d.ticker, order.ref, order.size, order.created.price))
+                    #print('BUY CREATE %s (%d), %.3f at %.3f' % 
+                    #    (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'BUY CREATE %s (%d), %.3f at %.3f\n' % 
                         (d.ticker, order.ref, order.size, order.created.price))
                 elif signal == -1:
                     # go short
                     order = self.sell(data=d, size=self.params.stake, exectype=bt.Order.Market)
-                    print('SELL CREATE %s (%d), %.3f at %.3f' % 
-                        (d.ticker, order.ref, order.size, order.created.price))
+                    #print('SELL CREATE %s (%d), %.3f at %.3f' % 
+                    #    (d.ticker, order.ref, order.size, order.created.price))
                     self.log(d, 'SELL CREATE %s (%d), %.3f at %.3f\n' % 
                         (d.ticker, order.ref, order.size, order.created.price))
                     

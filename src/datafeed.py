@@ -165,3 +165,22 @@ class DerivLiveData(bt.feeds.DataBase):
             self.ohlc['high'] = px
         if self.ohlc['low'] is None or px < self.ohlc['low']:
             self.ohlc['low'] = px
+
+class HistDataCSVData(bt.feeds.GenericCSVData):
+    params = (
+        ('timeframe', bt.TimeFrame.Minutes),
+        ('headers', False),
+        ('separator', ';'),
+        ('dtformat', '%Y%m%d %H%M%S'),
+        ('volume', 5),
+        ('openinterest', -1),
+        ('reverse', False)
+    )
+
+    def _loadline(self, linetokens):
+        try:
+            # Force volume to 1 regardless of input
+            linetokens[5] = 1.0
+        except IndexError:
+            return False  # Skip malformed lines
+        return super()._loadline(linetokens)
