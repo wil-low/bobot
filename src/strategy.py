@@ -31,7 +31,8 @@ class AntyStrategy(bt.Strategy):
         for d in self.datas:
             self.stoch[d] = bt.indicators.Stochastic(d, period=7, period_dfast=4, period_dslow=10, safediv=True)
 
-        self.broker.post_message(f"{self.__class__.__name__} started")
+        if self.params.trade['send_signals']:
+            self.broker.post_message(f"{self.__class__.__name__} started")
 
     def notify_order(self, order):
         #self.log(order.data, f"notify_order: {str(order)}")
@@ -182,7 +183,8 @@ class RSIPowerZonesStrategy(bt.Strategy):
             self.sma[d] = bt.indicators.SimpleMovingAverage(d, period=self.params.ma_period)
             self.rsi[d] = bt.indicators.RSI_Safe(d, period=self.params.rsi_period)
 
-        self.broker.post_message(f"{self.__class__.__name__} started")
+        if self.params.trade['send_signals']:
+            self.broker.post_message(f"{self.__class__.__name__} started")
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
