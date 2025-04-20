@@ -1,5 +1,5 @@
 #!/bin/bash
-CMDLINE='python3 src/main.py cfg/periodic.json'
+CMDLINE="python3 src/main.py $1"
 result=1
 while [ $result -ne 0 ]; do
     $CMDLINE
