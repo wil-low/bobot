@@ -17,7 +17,7 @@
     },
     "feed": {
         "history_size": 30,
-        "timeframe_sec": 300,
+        "timeframe_min": 5,
         "year": 2024,
         "tickers": [
             "WLDEUR"

@@ -37,7 +37,7 @@ def run_bot():
 
     # Add live data feed
     for symbol in config['feed']['tickers']:
-        data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=config['feed']['timeframe_sec'], history_size=config['feed']['history_size'])
+        data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=config['feed']['timeframe_min'] * 60, history_size=config['feed']['history_size'])
         data.ticker = symbol
         cerebro.adddata(data)
 

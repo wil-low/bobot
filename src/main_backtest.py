@@ -40,12 +40,21 @@ def run_bot():
         config = json.load(f)
         print(config)
 
-    timeframe = config['feed']['timeframe_sec']
+    timeframe = config['feed']['timeframe_min']
     tf = None
     compression = None
-    if timeframe == 300:
+    if timeframe == 1:
+        tf = bt.TimeFrame.Minutes
+        compression = 1
+    elif timeframe == 5:
         tf = bt.TimeFrame.Minutes
         compression = 5
+    elif timeframe == 10:
+        tf = bt.TimeFrame.Minutes
+        compression = 10
+    elif timeframe == 15:
+        tf = bt.TimeFrame.Minutes
+        compression = 15
     else:
         raise NotImplementedError
         
