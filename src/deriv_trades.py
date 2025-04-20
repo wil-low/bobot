@@ -22,7 +22,14 @@ def deriv_trades():
     logger.debug(config)
 
     # Add broker (Deriv WebSocket trader)
-    broker = DerivBroker(logger=logger, app_id=config['auth']['account_id'], api_token=config['auth']['api_key'], contract_expiration_min=config['trade']['expiration_min'])
+    broker = DerivBroker(
+        logger=logger,
+        app_id=config['auth']['account_id'],
+        api_token=config['auth']['api_key'],
+        contract_expiration_min=config['trade']['expiration_min'],
+        bot_token=config['auth']['bot_token'],
+        channel_id=config['auth']['channel_id']
+    )
 
     while not broker.ready():
         time.sleep(0.5)
