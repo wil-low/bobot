@@ -87,9 +87,9 @@ def run_bot():
 
     # Add strategy
     if config["strategy"]["name"] == 'RSIPowerZones':
-        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, stake=config['trade']['stake'])
+        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'Anty':
-        cerebro.addstrategy(AntyStrategy, logger=logger, stake=config['trade']['stake'])
+        cerebro.addstrategy(AntyStrategy, logger=logger, trade=config['trade'])
 
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
