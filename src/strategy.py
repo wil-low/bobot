@@ -11,6 +11,8 @@ class AntyStrategy(bt.Strategy):
         ('overbought', 20),
         ('oversold', 80),
         ('require_fast_trend', False),
+        ('min_hour', 0),
+        ('max_hour', 24),
         ('logger', None),
     )
 
@@ -93,6 +95,8 @@ class AntyStrategy(bt.Strategy):
 
         for i, d in enumerate(self.datas):
             if d.volume == 0:
+                continue
+            if d.datetime.datetime(0).hour < self.params.min_hour or d.datetime.datetime(0).hour >= self.params.max_hour:
                 continue
             fast_up = (self.stoch[d].percK[0] - self.stoch[d].percK[-1] > 0)
             fast_dir_changed = fast_up != (self.stoch[d].percK[-1] - self.stoch[d].percK[-2] > 0)

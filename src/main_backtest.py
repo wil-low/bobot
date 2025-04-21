@@ -55,6 +55,9 @@ def run_bot():
     elif timeframe == 15:
         tf = bt.TimeFrame.Minutes
         compression = 15
+    elif timeframe == 30:
+        tf = bt.TimeFrame.Minutes
+        compression = 30
     else:
         raise NotImplementedError
         
