@@ -263,5 +263,6 @@ class RSIPowerZonesStrategy(bt.Strategy):
                 self.order = self.buy(data=data, size=size, exectype=bt.Order.Market)
             self.log(data, '%s CREATE, %.2f at %.6f %s\n' % (side, self.order.size, data.close[0], double_str))
         if self.params.trade['send_signals']:
-            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ({self.params.trade['expiration_min']} мин)    {data.ticker}    {side_icon}    {side}    {double_str}"
+            symbol = data.ticker.replace('frx','')
+            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ({self.params.trade['expiration_min']} мин)    {symbol}    {side_icon}    {side}    {double_str}"
             self.broker.post_message(message)
