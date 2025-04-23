@@ -40,26 +40,13 @@ def run_bot():
         config = json.load(f)
         print(config)
 
-    timeframe = config['feed']['timeframe_min']
-    tf = None
-    compression = None
-    if timeframe == 1:
-        tf = bt.TimeFrame.Minutes
-        compression = 1
-    elif timeframe == 5:
-        tf = bt.TimeFrame.Minutes
-        compression = 5
-    elif timeframe == 10:
-        tf = bt.TimeFrame.Minutes
-        compression = 10
-    elif timeframe == 15:
-        tf = bt.TimeFrame.Minutes
-        compression = 15
-    elif timeframe == 30:
-        tf = bt.TimeFrame.Minutes
-        compression = 30
-    else:
-        raise NotImplementedError
+    tf = []
+
+    for timeframe in config['feed']['timeframe_min']:
+        if timeframe <= 60:
+            tf.append((bt.TimeFrame.Minutes, timeframe, timeframe))
+        else:
+            raise NotImplementedError
         
     tm = time.localtime()
 
@@ -83,15 +70,18 @@ def run_bot():
     # Add live data feed
     for symbol in config['feed']['tickers']:
         symbol = symbol.replace('frx', '')
-        data = HistDataCSVData(
-            dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
-            # Do not pass values before this date
-            #fromdate=datetime.datetime(2005, 1, 1),
-            # Do not pass values after this date
-            #todate=datetime(2023, 2, 27),
-        )
-        data.ticker = symbol
-        cerebro.resampledata(data, timeframe=tf, compression=compression)
+
+        for timeframe, compression, timeframe_min in tf:
+            data = HistDataCSVData(
+                dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
+                # Do not pass values before this date
+                #fromdate=datetime.datetime(2005, 1, 1),
+                # Do not pass values after this date
+                #todate=datetime(2023, 2, 27),
+            )
+            data.ticker = symbol
+            data.timeframe_min = timeframe_min
+            cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
     # Add broker (Deriv WebSocket trader)
     broker = BinaryOptionsBroker(logger=logger, cash=config['trade']['cash'], contract_expiration_min=config['trade']['expiration_min'])
