@@ -80,15 +80,15 @@ class DerivLiveData(bt.feeds.DataBase):
                     self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
                     epoch = self.ohlc['epoch']
                     if epoch % self.granularity == 0:
-                        self.log(str(self.ohlc))
                         if self.last_ts < epoch:
-                            self.md.put(self.ohlc)
+                            self.log(str(self.ohlc))
+                            self.md.put(self.ohlc.copy())  # Use copy to avoid overwriting
+                            self.last_ts = epoch           # ✅ only update after queuing
                             self.reset_ohlc()
-                            self.log(f"last_ts updated: {self.last_ts}")
+                            self.log(f"New bar queued for epoch: {epoch}")
                         else:
-                            self.log(f"duplicate epoch detected: {self.last_ts}")
+                            self.log(f"Duplicate epoch skipped: {epoch}")
                         self.realtime_md = True
-                    self.last_ts = epoch
 
         def on_error(ws, message):
             self.log(f"[DerivLiveData] on_error: {str(message)}")
