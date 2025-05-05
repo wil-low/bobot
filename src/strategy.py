@@ -173,7 +173,7 @@ class Anty(bt.Strategy):
                 return                            
 
 
-class RSIPowerZonesStrategy(bt.Strategy):
+class RSIPowerZones(bt.Strategy):
     params = (
         ('trade', {}),
         ('enable_short', True),
