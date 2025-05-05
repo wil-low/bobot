@@ -4,13 +4,15 @@ from datetime import datetime
 import json
 import backtrader as bt
 
-class AntyStrategy(bt.Strategy):
+class Anty(bt.Strategy):
     params = (
         ('trade', {}),
         ('trending_bars', 3),
-        ('overbought', 20),
-        ('oversold', 80),
-        ('require_fast_trend', False),
+        ('overbought', 25),
+        ('oversold', 75),
+        ('require_fast_trend', True),
+        ('pivot_lookback', 20),
+        ('min_d_diff', 20),
         ('min_hour', 0),
         ('max_hour', 24),
         ('logger', None),
@@ -87,6 +89,20 @@ class AntyStrategy(bt.Strategy):
         """Returns True if the last n bars are continuously decreasing."""
         return all(data[-i - offset] < data[-i - 1 - offset] for i in range(0, n))
 
+    @staticmethod
+    def latest_pivot(d, is_buy, lookback):
+        result = 500
+        for i in range(1, lookback):
+            if is_buy:
+                if (d[-i] < d[-i + 1]) and (d[-i] < d[-i - 1]):
+                    result = i
+                    break
+            else:
+                if (d[-i] > d[-i + 1]) and (d[-i] > d[-i - 1]):
+                    result = i
+                    break
+        return result  
+
     def next(self):
         # only have 1 position across all symbols
         #for i, d in enumerate(self.datas):
@@ -113,18 +129,25 @@ class AntyStrategy(bt.Strategy):
             fast_was_falling = False
             signal = 0
             if fast_dir_changed and not_over:
-                slow_rising = AntyStrategy.is_rising(self.stoch[d].percD, self.params.trending_bars)
-                slow_falling = AntyStrategy.is_falling(self.stoch[d].percD, self.params.trending_bars)
+                percD = self.stoch[d].percD
+                slow_rising = Anty.is_rising(percD, self.params.trending_bars)
+                slow_falling = Anty.is_falling(percD, self.params.trending_bars)
                 if self.params.require_fast_trend:
-                    fast_was_rising = AntyStrategy.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
-                    fast_was_falling = AntyStrategy.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
+                    fast_was_rising = Anty.is_rising(self.stoch[d].percK, self.params.trending_bars, 1)
+                    fast_was_falling = Anty.is_falling(self.stoch[d].percK, self.params.trending_bars, 1)
                 else:
                     fast_was_rising = True
                     fast_was_falling = True
                 if slow_rising and fast_up and fast_was_falling:
-                    signal = 1
+                    pivot = self.latest_pivot(percD, True, self.params.pivot_lookback)
+                    self.log(d, f"pivot_up {pivot}")
+                    if pivot < 10 and (d.high[0] + d.low[0]) / 2 > (d.high[-pivot] + d.low[-pivot]) / 2 and percD[0] - percD[-pivot] > self.params.min_d_diff:
+                        signal = 1
                 elif slow_falling and not fast_up and fast_was_rising:
-                    signal = -1
+                    pivot = self.latest_pivot(percD, False, self.params.pivot_lookback)
+                    self.log(d, f"pivot_dn {pivot}")
+                    if pivot < 10 and (d.high[0] + d.low[0]) / 2 < (d.high[-pivot] + d.low[-pivot]) / 2 and percD[-pivot] - percD[0] > self.params.min_d_diff:
+                        signal = -1
 
             self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f; %%K %.2f, %%D %.2f; %d/%d/%d, %d/%d, %d/%d; signal %d" %
                 (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], self.stoch[d].percK[0], self.stoch[d].percD[0],
