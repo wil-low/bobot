@@ -293,3 +293,241 @@ class RSIPowerZones(bt.Strategy):
             symbol = data.ticker.replace('frx','')
             message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ({self.params.trade['expiration_min']} мин)    {symbol}    {side_icon}    {side}    {double_str}"
             self.broker.post_message(message)
+
+
+class KissIchimoku(bt.Strategy):
+    params = (
+        ('trade', {}),
+        ('max_risk_percent', 5),
+        ('logger', None),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        ticker = ''
+        tf = 0
+        if data:
+            ticker = data.ticker
+            tf = data.timeframe_min
+        if self.params.logger:
+            self.params.logger.debug('%-10s,%-3d: %s' % (ticker, tf, txt))
+        else:
+            print('%-10s,%-3d: %s' % (ticker, tf, txt))
+
+    def __init__(self):
+        self.log(None, f"params: {self.params._getkwargs()}")
+        self.order_refs = {}  # Store orders for each data feed
+
+        self.prev_trend0 = []
+        self.tickers = []
+        self.qty = []
+        timeframes = []
+        for d in self.datas:
+            self.prev_trend0.append(100)
+            try:
+                idx = self.tickers.index(d.ticker)
+            except ValueError:
+                self.tickers.append(d.ticker)
+                self.qty.append(None)
+            try:
+                idx = timeframes.index(d.timeframe_min)
+            except ValueError:
+                timeframes.append(d.timeframe_min)
+
+         # Create 2D array with None as placeholders
+        self.datasets = [[None for _ in timeframes] for _ in self.tickers]
+        self.ichimoku = [[None for _ in timeframes] for _ in self.tickers]
+        self.fast_ema = [[None for _ in timeframes] for _ in self.tickers]
+        self.slow_ema = [[None for _ in timeframes] for _ in self.tickers]
+
+        # Index datasets into the matrix
+        for d in self.datas:
+            i = self.tickers.index(d.ticker)
+            j = timeframes.index(d.timeframe_min)
+            self.datasets[i][j] = d
+            self.ichimoku[i][j] = bt.indicators.Ichimoku(d)
+            self.fast_ema[i][j] = bt.indicators.ExponentialMovingAverage(d, period=65)
+            self.slow_ema[i][j] = bt.indicators.ExponentialMovingAverage(d, period=200)
+
+        if self.params.trade['send_signals']:
+            self.broker.post_message(f"{self.__class__.__name__} started")
+
+    def notify_order(self, order):
+        #self.log(order.data, f"notify_order: {str(order)}")
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                    order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                    order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
+
+    def next(self):
+        # only have 1 position across all symbols
+        position_exists = False
+        for i, _ in enumerate(self.tickers):
+            if self.getposition(self.datasets[i][0]):
+                position_exists = True
+                break
+
+        for i, _ in enumerate(self.tickers):
+            new_stop_price = self.ichimoku[i][0].l.kijun_sen[0]
+            d = self.datasets[i][0]
+            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f, stop %.5f" %
+                (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], new_stop_price)
+            )
+            if self.qty[i] is None:
+                self.qty[i] = int(self.params.trade['margin_qty'] * self.params.trade["leverage"] / d.close[0])
+                self.log(d, f"Fixed order qty is {self.qty[i]}")
+
+            pos = self.getposition(d)
+            if not position_exists:
+                # check 100% bullish/bearish, starting from the largest timeframe (2-1)
+                trend2 = self.eval_trend(i, 2)
+                if trend2 != 4 and trend2 != -4:
+                #    self.log(d, f"trend2={trend2}")
+                    continue
+                #self.log(d, f"trend2 is {trend2}")
+                trend1 = self.eval_trend(i, 1)
+                if trend1 != trend2:
+                #    self.log(d, f"trend1={trend1}")
+                    continue
+                #self.log(d, f"trend1 is {trend1}")
+                trend0 = self.eval_trend(i, 0)
+                if trend0 != trend2:
+                #    self.log(d, f"trend0={trend0}")
+                    continue
+
+                #trend1 = self.eval_trend(i, 1)
+                #trend0 = self.eval_trend(i, 0)
+                #self.log(d, f"trends are {trend0}, {trend1}, {trend2}")
+                #self.log(d, f"trend2 is {trend2}: '{str2}'")
+                #if not ((trend2 == 4 or trend2 == -4) and trend0 == trend2 and trend1 == trend2):
+                #    continue
+
+                signal = 0
+                if trend2 == 4 and d.close[0] < d.open[0]:
+                    signal = 1
+                elif trend2 == -4 and d.close[0] > d.open[0]:
+                    signal = -1
+
+                if signal != 0:
+                    bracket = []
+                    #self.log(d, f"Prev {self.prev_trend0[i]}, current {trend0}")
+                    #if self.prev_trend0[i] == trend0:
+                    #    return
+                    # only enter position if trend is changed recently
+                    self.prev_trend0[i] = trend0
+                    pos_size = self.qty[i] #self.calculate_position_size(d, abs(d.close[0] - new_stop_price))
+                    if signal == 1:
+                        # go long
+                        bracket = self.buy_bracket(data=d,
+                            size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
+                    elif signal == -1:
+                        # go short
+                        bracket = self.sell_bracket(data=d,
+                            size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
+                    
+                    self.log(d, '%s CREATE (%d), %.3f at %.3f, stop (%d) at %.3f' % 
+                        ("BUY" if bracket[0].isbuy() else "SELL", bracket[0].ref, bracket[0].size, bracket[0].created.price, bracket[1].ref, bracket[1].created.price))
+                    self.order_refs[d] = {
+                        'main': bracket[0],
+                        'stop': bracket[1],
+                        'limit': bracket[2]
+                    }
+
+            elif pos:
+                old_stop = self.order_refs[d]['stop']
+                if old_stop is None or not old_stop.alive():
+                    return  # Already executed or cancelled
+
+                need_move_stop = False
+                if not old_stop.isbuy():
+                    need_move_stop = new_stop_price > old_stop.created.price
+                else:
+                    need_move_stop = new_stop_price < old_stop.created.price
+                if need_move_stop:
+                    # Cancel old stop
+                    self.cancel(old_stop)
+
+                    # Submit new stop order at a new price
+                    new_stop = None
+                    if old_stop.isbuy():
+                        new_stop = self.buy(data=d, size=old_stop.size, exectype=bt.Order.Stop, price=new_stop_price)
+                    else:
+                        new_stop = self.sell(data=d, size=old_stop.size, exectype=bt.Order.Stop, price=new_stop_price)
+                    self.log(d, '%s STOP MOVED (%d), %.3f at %.3f' % 
+                        ("BUY" if new_stop.isbuy() else "SELL", new_stop.ref, new_stop.size, new_stop.created.price))
+                    self.order_refs[d]['stop'] = new_stop
+
+    def eval_trend(self, i, j):
+        d = self.datasets[i][j]
+        ichi = self.ichimoku[i][j]
+        fast_ema = self.fast_ema[i][j]
+        slow_ema = self.slow_ema[i][j]
+        close = d.close[0]
+
+        result = 0
+        if close > ichi.l.kijun_sen:
+            result += 1
+        else:
+            result -= 1
+
+        if close > ichi.l.senkou_span_a[0] and ichi.l.senkou_span_a[0] > ichi.l.senkou_span_b[0]:
+            result += 1
+        elif close < ichi.l.senkou_span_a[0] and ichi.l.senkou_span_a[0] < ichi.l.senkou_span_b[0]:
+            result -= 1
+
+        if d.close[-ichi.p.chikou] < close:
+            result += 1
+        else:
+            result -= 1
+
+        if fast_ema[0] > fast_ema[-1] and slow_ema[0] > slow_ema[-1] and close > fast_ema[0] and close > slow_ema[0]:
+            result += 1
+        elif fast_ema[0] < fast_ema[-1] and slow_ema[0] < slow_ema[-1] and close < fast_ema[0] and close < slow_ema[0]:
+            result -= 1
+
+        return result
+
+    def calculate_position_size(self, d, stop_diff):
+        return self.params.trade['qty']
+        risk_value = self.broker.getcash() * self.params.max_risk_percent / 100
+        margin_position_size = int(risk_value * self.params.trade["leverage"] / d.close[0])
+        risk_position_size = 1;
+        if stop_diff > 0:
+            risk_position_size = int(risk_value / stop_diff)
+        self.log(d, f'calculate_position_size: risk_value {risk_value}, diff {stop_diff}, risk {risk_position_size}, margin {margin_position_size}, cash {self.broker.getcash()}')
+        result = min(risk_position_size, margin_position_size)
+        return result
