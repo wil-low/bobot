@@ -34,6 +34,7 @@ class DerivLiveData(bt.feeds.DataBase):
         self._last_candle = None
         self._candle_consumed = True
         self.ohlc = {}
+        self.last_ts = 0
         self.ws = None
         self.thread = None
 
@@ -79,7 +80,11 @@ class DerivLiveData(bt.feeds.DataBase):
                     self.update_ohlc(data['tick']['epoch'], data['tick']['quote'])
                     if self.ohlc['epoch'] % self.granularity == 0:
                         self.log(str(self.ohlc))
-                        self.md.put(self.ohlc)
+                        if self.last_ts < self.ohlc['epoch']:
+                            self.md.put(self.ohlc)
+                            self.last_ts = self.ohlc['epoch']
+                        else:
+                            self.log(f"duplicate epoch detected: {self.last_ts}")
                         self.reset_ohlc()
                         self.realtime_md = True
 
