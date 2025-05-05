@@ -83,9 +83,10 @@ class DerivLiveData(bt.feeds.DataBase):
                         if self.last_ts < self.ohlc['epoch']:
                             self.md.put(self.ohlc)
                             self.last_ts = self.ohlc['epoch']
+                            self.reset_ohlc()
+                            self.log(f"last_ts updated: {self.last_ts}")
                         else:
                             self.log(f"duplicate epoch detected: {self.last_ts}")
-                        self.reset_ohlc()
                         self.realtime_md = True
 
         def on_error(ws, message):
