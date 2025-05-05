@@ -12,6 +12,7 @@
         "send_signals": false,
         "send_orders": true,
         "cash": 100,
+        "min_payout": 0.75,
         "stake": 10,
         "expiration_min": 15
     },

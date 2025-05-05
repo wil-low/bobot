@@ -48,7 +48,8 @@ def run_bot():
         api_token=config['auth']['api_key'],
         contract_expiration_min=config['trade']['expiration_min'],
         bot_token=config['auth']['bot_token'],
-        channel_id=config['auth']['channel_id']
+        channel_id=config['auth']['channel_id'],
+        min_payout=config['trade']['min_payout']
     )
     cerebro.setbroker(broker)
 
