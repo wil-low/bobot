@@ -20,7 +20,7 @@ class DerivBroker(bt.broker.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, app_id, api_token, contract_expiration_min, bot_token, channel_id):
+    def __init__(self, logger, app_id, api_token, contract_expiration_min, bot_token, channel_id, min_payout=0.8):
         super().__init__()
         self.logger = logger
         self.cash = 10000.0  # initial virtual balance
@@ -28,6 +28,7 @@ class DerivBroker(bt.broker.BrokerBase):
         self.trades = []
         self.trades_offset = 0
         self.trades_limit = 50
+        self.min_payout = min_payout
         self.positions = {}
         self.order_id = 1
         self.app_id = app_id
@@ -70,18 +71,22 @@ class DerivBroker(bt.broker.BrokerBase):
                         ws.sock.ping()
                 elif data['msg_type'] == 'proposal':
                     self.log(f"on_message: {message}")
-                    msg = {
-                        "buy": data['proposal']['id'],
-                        "price": 100000000000,
-                        "passthrough": {
-                            "symbol": data['echo_req']['symbol'],
-                            "contract_type": data['echo_req']['contract_type']
+                    payout = data['proposal']['payout'] / data['proposal']['ask_price'] - 1
+                    if payout > self.min_payout:
+                        msg = {
+                            "buy": data['proposal']['id'],
+                            "price": 100000000000,
+                            "passthrough": {
+                                "symbol": data['echo_req']['symbol'],
+                                "contract_type": data['echo_req']['contract_type']
+                            }
                         }
-                    }
-                    if self.ws:
-                        self.ws.send(json.dumps(msg))
+                        if self.ws:
+                            self.ws.send(json.dumps(msg))
+                        else:
+                            self.log("⚠️ WebSocket not connected")
                     else:
-                        self.log("⚠️ WebSocket not connected")
+                        self.log(f"Skipping proposal for {data['echo_req']['symbol']}, payout {payout} < {self.min_payout}")
                 elif data['msg_type'] == 'buy':
                     self.log(f"✅ Trade placed: {data['buy']['contract_id']}")
                     self.add_position(data['passthrough']['symbol'], data['passthrough']['contract_type'] == 'CALL', 1, data['buy']['buy_price'])
