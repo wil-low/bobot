@@ -9,7 +9,7 @@ from loguru import logger  # pip install loguru
 
 from broker import BinaryOptionsBroker
 from datafeed import HistDataCSVData
-from strategy import AntyStrategy, RSIPowerZonesStrategy
+from strategy import Anty, KissIchimoku, RSIPowerZones
 
 def logged_print(message):
     logger.info(message)
@@ -43,7 +43,7 @@ def run_bot():
     tf = []
 
     for timeframe in config['feed']['timeframe_min']:
-        if timeframe <= 60:
+        if timeframe <= 240:
             tf.append((bt.TimeFrame.Minutes, timeframe, timeframe))
         else:
             raise NotImplementedError
@@ -83,15 +83,21 @@ def run_bot():
             data.timeframe_min = timeframe_min
             cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
-    # Add broker (Deriv WebSocket trader)
-    broker = BinaryOptionsBroker(logger=logger, cash=config['trade']['cash'], contract_expiration_min=config['trade']['expiration_min'])
-    cerebro.setbroker(broker)
+    if config['trade']['binary_broker']:
+        broker = BinaryOptionsBroker(logger=logger, cash=config['trade']['cash'], contract_expiration_min=config['trade']['expiration_min'])
+        cerebro.setbroker(broker)
+    else:
+        cerebro.broker.setcash(config['trade']['cash'])
+        cerebro.broker.set_slippage_perc(0.0003)
+        cerebro.broker.setcommission(commission=0, leverage=config['trade']['leverage'])
 
     # Add strategy
     if config["strategy"]["name"] == 'RSIPowerZones':
-        cerebro.addstrategy(RSIPowerZonesStrategy, logger=logger, trade=config['trade'])
+        cerebro.addstrategy(RSIPowerZones, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'Anty':
-        cerebro.addstrategy(AntyStrategy, logger=logger, trade=config['trade'])
+        cerebro.addstrategy(Anty, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'KissIchimoku':
+        cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
 
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
