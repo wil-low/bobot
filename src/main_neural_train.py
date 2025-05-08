@@ -62,8 +62,7 @@ for _, row in df.iterrows():
     ticker_encoded = one_hot_encode_ticker(row['Ticker'])
     A_values = [row[f'A{i}'] for i in range(input_length)]
     B_values = [row[f'B{i}'] for i in range(input_length)]
-    C_values = [row[f'C{i}'] for i in range(input_length)]
-    inputs = np.concatenate([ticker_encoded, A_values, B_values, C_values])
+    inputs = np.concatenate([ticker_encoded, A_values, B_values])
     
     # Labels are in -1, 0, 1
     labels = [row['Up1'], row['Up2'], row['Up3']]

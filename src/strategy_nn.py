@@ -2,7 +2,6 @@
 
 import csv
 from datetime import datetime
-import json
 import math
 import os
 
@@ -11,6 +10,12 @@ import backtrader as bt
 
 class AntyCollector(bt.Strategy):
     params = (
+        ('trending_bars', 3),
+        ('overbought', 25),
+        ('oversold', 75),
+        ('require_fast_trend', True),
+        ('pivot_lookback', 20),
+        ('min_d_diff', 20),
         ('logger', None),
     )
 
@@ -28,14 +33,11 @@ class AntyCollector(bt.Strategy):
         self.log(None, f"params: {self.params._getkwargs()}")
         self.o = dict()
         self.stoch = dict()
-        self.rsi = dict()
         for d in self.datas:
             self.stoch[d] = bt.indicators.Stochastic(d, period=7, period_dfast=4, period_dslow=10, safediv=True)
-            self.rsi[d] = bt.indicators.RelativeStrengthIndex(d, period=14, safediv=True)
 
         # indicator A: percK
         # indicator B: percD
-        # indicator C: RSI
 
         self.input_length = 5
         self.output_file = 'anty_training_data.csv'
@@ -45,7 +47,7 @@ class AntyCollector(bt.Strategy):
         if not os.path.exists(self.output_file):
             with open(self.output_file, mode='w', newline='') as f:
                 writer = csv.writer(f)
-                input_headers = ["Ticker"] + [f"A{i}" for i in range(self.input_length)] + [f"B{i}" for i in range(self.input_length)] + [f"C{i}" for i in range(self.input_length)]
+                input_headers = ["Ticker"] + [f"A{i}" for i in range(self.input_length)] + [f"B{i}" for i in range(self.input_length)]
                 output_headers = ['Up1', 'Up2', 'Up3']
                 writer.writerow(input_headers + output_headers)
 
@@ -68,7 +70,6 @@ class AntyCollector(bt.Strategy):
             # Collect last self.input_length normalized indicator A, B, C values (scale to [0, 1] here if needed)
             a_values = [self.stoch[d].percK[-3 - i] for i in range(0, self.input_length)]
             b_values = [self.stoch[d].percD[-3 - i] for i in range(0, self.input_length)]
-            c_values = [self.rsi[d][-3 - i] for i in range(0, self.input_length)]
 
             # Normalize values between 0 and 1 for NN input
             def normalize(values):
@@ -77,10 +78,9 @@ class AntyCollector(bt.Strategy):
 
             a_norm = normalize(a_values)
             b_norm = normalize(b_values)
-            c_norm = normalize(c_values)
 
             # Check if a_norm or b_norm contain NaN values
-            if any(math.isnan(x) for x in a_norm) or any(math.isnan(x) for x in b_norm) or any(math.isnan(x) for x in c_norm):
+            if any(math.isnan(x) for x in a_norm) or any(math.isnan(x) for x in b_norm):
                 #print("Error: One of the arrays contains NaN values.")
                 continue
 
@@ -95,7 +95,7 @@ class AntyCollector(bt.Strategy):
             # Write row to CSV
             with open(self.output_file, mode='a', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([d.ticker] + a_norm + b_norm + c_norm + [up1, up2, up3])
+                writer.writerow([d.ticker] + a_norm + b_norm + [up1, up2, up3])
 
 class Anty(bt.Strategy):
     params = (
