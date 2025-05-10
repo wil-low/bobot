@@ -10,6 +10,7 @@ from loguru import logger  # pip install loguru
 from broker import BinaryOptionsBroker
 from datafeed import HistDataCSVData
 from strategy import Anty, KissIchimoku, RSIPowerZones
+from strategy_stat import CointegratedPairs
 
 def logged_print(message):
     logger.info(message)
@@ -98,6 +99,8 @@ def run_bot():
         cerebro.addstrategy(Anty, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'KissIchimoku':
         cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'CointegratedPairs':
+        cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
 
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
