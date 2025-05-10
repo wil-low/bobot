@@ -2,10 +2,17 @@
 
 from datetime import datetime
 import json
+import os
 import sys
 import time
-import backtrader as bt
 from loguru import logger  # pip install loguru
+
+# Get the parent directory and append it to sys.path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(parent_dir)
+sys.path.append(parent_dir + '/backtrader')
+
+import backtrader as bt
 
 from broker import BinaryOptionsBroker
 from datafeed import HistDataCSVData
@@ -112,8 +119,8 @@ def run_bot():
 
     logged_print(f"Sharpe Ratio: {result[0].analyzers.sharpe.get_analysis()['sharperatio']}")
 
-    json_str = json.dumps(result[0].analyzers.trades.get_analysis(), indent=4)
-    logger.debug(f'Trade Analyzer: {json_str}')
+    #json_str = json.dumps(result[0].analyzers.trades.get_analysis(), indent=4)
+    #logger.debug(f'Trade Analyzer: {json_str}')
     print_trade_analysis(result[0].analyzers.trades.get_analysis())
     
     #json_str = json.dumps(result[0].analyzers.drawdown.get_analysis(), indent=4)

@@ -4,8 +4,16 @@ from datetime import datetime
 import json
 import sys
 import time
-import backtrader as bt
+import os
 from loguru import logger  # pip install loguru
+
+
+# Get the parent directory and append it to sys.path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(parent_dir)
+sys.path.append(parent_dir + '/backtrader')
+
+import backtrader as bt
 
 from datafeed import HistDataCSVData
 from strategy_nn import AntyCollector
