@@ -1,42 +1,18 @@
-# datafeed.py
-
-import queue
-import os
-import traceback
-import backtrader as bt
-import websocket
-import threading
 import json
+import queue
+import threading
+import websocket
 from datetime import datetime, timezone
-import time
+from feed.datafeed import BobotLiveDataBase
 
-class DerivLiveData(bt.feeds.DataBase):
+class DerivLiveData(BobotLiveDataBase):
     """
     A Backtrader live data feed that connects to Deriv WebSocket and streams tick data.
     """
 
-    def log(self, txt, dt=None):
-        ''' Logging function for this feed'''
-        ticker = self.symbol
-        if self.logger:
-            self.logger.debug('%-10s: %s' % (ticker, txt))
-        else:
-            print('%-10s: %s' % (ticker, txt))
-
     def __init__(self, logger, app_id, symbol, granularity, history_size):
-        self.logger = logger
+        super().__init__(logger, symbol, granularity, history_size)
         self.app_id = app_id
-        self.symbol = symbol
-        self.history_size = history_size
-        self.granularity = granularity
-        self.realtime_md = False
-        self.md = queue.Queue()
-        self._last_candle = None
-        self._candle_consumed = True
-        self.ohlc = {}
-        self.last_ts = 0
-        self.ws = None
-        self.thread = None
 
     def start(self):
         super().start()
@@ -44,9 +20,9 @@ class DerivLiveData(bt.feeds.DataBase):
 
     def _start_ws(self):
         def on_open(ws):
-            #self.log("WebSocket connected.")
+            self.log("WebSocket connected.")
             self.keep_alive()
-            ws.send(json.dumps({
+            data = json.dumps({
                 "ticks_history": self.symbol,
                 "adjust_start_time": 1,
                 "count": self.history_size,
@@ -54,10 +30,12 @@ class DerivLiveData(bt.feeds.DataBase):
                 "granularity": self.granularity,
                 "start": 1,
                 "style": "candles"
-            }))
+            })
+            self.log(data)
+            ws.send(data)
 
         def on_message(ws, message):
-            #print(f"datafeed: {message}")
+            self.log(f"datafeed: {message}")
             data = json.loads(message)
             if "error" in data:
                 self.log(f"ERROR in {data['msg_type']}: {data['error']['message']}")
@@ -93,11 +71,16 @@ class DerivLiveData(bt.feeds.DataBase):
         def on_error(ws, message):
             self.log(f"[DerivLiveData] on_error: {str(message)}")
 
+        def on_close(ws, close_status_code, close_msg):
+            self.log(f"[DerivLiveData] WebSocket closed: {close_status_code} - {close_msg}")
+
         def run_ws():
+            self.log(f"run_ws, app_id={self.app_id}")
             self.ws = websocket.WebSocketApp(f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}",
                 on_open=on_open,
                 on_message=on_message,
-                on_error=on_error
+                on_error=on_error,
+                on_close=on_close
             )
             self.ws.run_forever()
 
@@ -135,63 +118,3 @@ class DerivLiveData(bt.feeds.DataBase):
 
         self._candle_consumed = True  # Only set to True after setting lines
         return True
-
-    def keep_alive(self):
-        def send_ping():
-            #print(f"{self.symbol}: send_ping")
-            if self.ws:
-                try:
-                    self.ws.send(json.dumps({'ping': 1}))
-                    #self.ws.sock.ping()
-                except websocket.WebSocketConnectionClosedException:
-                    os._exit(1)
-            else:
-                self.log("ping: WebSocket not connected")
-            
-            # Re-run the send_ping function every 30 seconds
-            self._schedule_next_ping()
-
-        def start_send_ping():
-            # Call send_ping initially
-            send_ping()
-
-        # Start the periodic call using Timer
-        self._schedule_next_ping = lambda: threading.Timer(30, send_ping).start()
-
-        # First call to start the periodic checks
-        start_send_ping()
-
-    def reset_ohlc(self):
-        self.ohlc = {
-            'open': self.ohlc['close'],
-            'high': self.ohlc['close'],
-            'low': self.ohlc['close'],
-            'close': None
-        }
-
-    def update_ohlc(self, epoch, px):
-        self.ohlc['epoch'] = epoch
-        self.ohlc['close'] = px
-        if self.ohlc['high'] is None or px > self.ohlc['high']:
-            self.ohlc['high'] = px
-        if self.ohlc['low'] is None or px < self.ohlc['low']:
-            self.ohlc['low'] = px
-
-class HistDataCSVData(bt.feeds.GenericCSVData):
-    params = (
-        ('timeframe', bt.TimeFrame.Minutes),
-        ('headers', False),
-        ('separator', ';'),
-        ('dtformat', '%Y%m%d %H%M%S'),
-        ('volume', 5),
-        ('openinterest', -1),
-        ('reverse', False)
-    )
-
-    def _loadline(self, linetokens):
-        try:
-            # Force volume to 1 regardless of input
-            linetokens[5] = 1.0
-        except IndexError:
-            return False  # Skip malformed lines
-        return super()._loadline(linetokens)

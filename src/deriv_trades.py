@@ -1,12 +1,19 @@
 # deriv_trades.py
 
 import json
+import os
 import sys
 import time
-import backtrader as bt
 from loguru import logger  # pip install loguru
 
-from broker import DerivBroker
+# Get the parent directory and append it to sys.path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(parent_dir)
+sys.path.append(parent_dir + '/backtrader')
+
+import backtrader as bt
+
+from broker.deriv import DerivBroker
 
 def deriv_trades():
     config = {}

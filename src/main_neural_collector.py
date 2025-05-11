@@ -15,7 +15,7 @@ sys.path.append(parent_dir + '/backtrader')
 
 import backtrader as bt
 
-from datafeed import HistDataCSVData
+from feed.datafeed import HistDataCSVData
 from strategy_nn import AntyCollector
 
 def logged_print(message):

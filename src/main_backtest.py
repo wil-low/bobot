@@ -14,8 +14,8 @@ sys.path.append(parent_dir + '/backtrader')
 
 import backtrader as bt
 
-from broker import BinaryOptionsBroker
-from datafeed import HistDataCSVData
+from broker.bo import BinaryOptionsBroker
+from feed.datafeed import HistDataCSVData
 from strategy import Anty, KissIchimoku, RSIPowerZones
 from strategy_stat import CointegratedPairs
 
@@ -91,8 +91,14 @@ def run_bot():
             data.timeframe_min = timeframe_min
             cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
-    if config['trade']['binary_broker']:
-        broker = BinaryOptionsBroker(logger=logger, cash=config['trade']['cash'], contract_expiration_min=config['trade']['expiration_min'])
+    if config['trade']['broker'] == "BO":
+        broker = BinaryOptionsBroker(
+            logger=logger,
+            bot_token=config['auth']['bot_token'],
+            channel_id=config['auth']['channel_id'],
+            cash=config['trade']['cash'],
+            contract_expiration_min=config['trade']['expiration_min']
+        )
         cerebro.setbroker(broker)
     else:
         cerebro.broker.setcash(config['trade']['cash'])

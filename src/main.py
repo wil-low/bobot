@@ -14,8 +14,10 @@ sys.path.append(parent_dir + '/backtrader')
 
 import backtrader as bt
 
-from broker import DerivBroker
-from datafeed import DerivLiveData
+from broker.deriv import DerivBroker
+from broker.okx import OKXBroker
+from feed.deriv import DerivLiveData
+from feed.okx import OKXLiveData
 from strategy import Anty, KissIchimoku, RSIPowerZones
 
 def run_bot():
@@ -45,20 +47,38 @@ def run_bot():
 
     # Add live data feed
     for symbol in config['feed']['tickers']:
-        data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=config['feed']['timeframe_min'] * 60, history_size=config['feed']['history_size'])
-        data.ticker = symbol
-        cerebro.adddata(data)
+        for gran in config['feed']['timeframe_min']:
+            data = None
+            if config['feed']['provider'] == "Deriv":
+                data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
+            if config['feed']['provider'] == "OKX":
+                data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
+                data.timeframe_min = gran 
+            data.ticker = symbol
+            cerebro.adddata(data)
 
-    # Add broker (Deriv WebSocket trader)
-    broker = DerivBroker(
-        logger=logger,
-        app_id=config['auth']['account_id'],
-        api_token=config['auth']['api_key'],
-        contract_expiration_min=config['trade']['expiration_min'],
-        bot_token=config['auth']['bot_token'],
-        channel_id=config['auth']['channel_id'],
-        min_payout=config['trade']['min_payout']
-    )
+    # Add broker
+
+    broker = None
+    if config['trade']['broker'] == "Deriv":
+        broker = DerivBroker(
+            logger=logger,
+            bot_token=config['auth']['bot_token'],
+            channel_id=config['auth']['channel_id'],
+            app_id=config['auth']['account_id'],
+            api_token=config['auth']['api_key'],
+            contract_expiration_min=config['trade']['expiration_min'],
+            min_payout=config['trade']['min_payout']
+        )
+    elif config['trade']['broker'] == "OKX":
+        broker = OKXBroker(
+            logger=logger,
+            bot_token=config['auth']['bot_token'],
+            channel_id=config['auth']['channel_id'],
+            api_key=config['auth']['api_key'],
+            api_secret=config['auth']['api_secret'],
+            api_passphrase=config['auth']['api_passphrase'],
+        )
     cerebro.setbroker(broker)
 
     while not broker.ready():
