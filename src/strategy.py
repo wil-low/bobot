@@ -317,7 +317,8 @@ class KissIchimoku(bt.Strategy):
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
         self.order_refs = {}  # Store orders for each data feed
-
+        self.fast_eval_trend = False
+        self.order_sent = False
         self.prev_trend0 = []
         self.tickers = []
         self.qty = []
@@ -395,6 +396,14 @@ class KissIchimoku(bt.Strategy):
 
     def next(self):
         # only have 1 position across all symbols
+
+        #if not self.order_sent:
+        #    o = self.buy(data=self.datasets[0][0],
+        #        size=0.1, exectype=bt.Order.Market)
+        #    self.order_sent = True
+        #else:
+        #    self.close(self.datasets[0][0])
+
         position_exists = False
         for i, _ in enumerate(self.tickers):
             if self.getposition(self.datasets[i][0]):
@@ -404,68 +413,87 @@ class KissIchimoku(bt.Strategy):
         for i, _ in enumerate(self.tickers):
             new_stop_price = self.ichimoku[i][0].l.kijun_sen[0]
             d = self.datasets[i][0]
-            self.log(d, "%s: o %.5f, h %.5f, l %.5f, c %.5f, stop %.5f" %
-                (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], new_stop_price)
-            )
-            if self.qty[i] is None:
-                self.qty[i] = int(self.params.trade['margin_qty'] * self.params.trade["leverage"] / d.close[0])
-                self.log(d, f"Fixed order qty is {self.qty[i]}")
 
             pos = self.getposition(d)
             if not position_exists:
-                # check 100% bullish/bearish, starting from the largest timeframe (2-1)
-                trend2 = self.eval_trend(i, 2)
-                if trend2 != 4 and trend2 != -4:
-                #    self.log(d, f"trend2={trend2}")
-                    continue
-                #self.log(d, f"trend2 is {trend2}")
-                trend1 = self.eval_trend(i, 1)
-                if trend1 != trend2:
-                #    self.log(d, f"trend1={trend1}")
-                    continue
-                #self.log(d, f"trend1 is {trend1}")
-                trend0 = self.eval_trend(i, 0)
-                if trend0 != trend2:
-                #    self.log(d, f"trend0={trend0}")
-                    continue
+                if d.volume == 0:
+                    return
+                if self.qty[i] is None:
+                    self.log(d, "Calculate qty on %s: o %.5f, h %.5f, l %.5f, c %.5f, stop %.5f" %
+                        (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], new_stop_price)
+                    )
+                    self.qty[i] = int(self.params.trade['margin_qty'] * self.params.trade["leverage"] / d.close[0])
+                    self.log(d, f"Fixed order qty is {self.qty[i]}")
 
-                #trend1 = self.eval_trend(i, 1)
-                #trend0 = self.eval_trend(i, 0)
-                #self.log(d, f"trends are {trend0}, {trend1}, {trend2}")
-                #self.log(d, f"trend2 is {trend2}: '{str2}'")
-                #if not ((trend2 == 4 or trend2 == -4) and trend0 == trend2 and trend1 == trend2):
-                #    continue
+                #self.log(d, "eval_trend %s: o %.5f, h %.5f, l %.5f, c %.5f" %
+                #    (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0])
+                #)
+
+                trend0 = None
+                trend1 = None
+                trend2 = None
+
+                if self.fast_eval_trend:
+                    # check 100% bullish/bearish, starting from the largest timeframe (2-1)
+                    trend2 = self.eval_trend(i, 2)
+                    if trend2 != 4 and trend2 != -4:
+                        self.log(d, f"trend2={trend2}, next ticker")
+                        continue
+                    #self.log(d, f"trend2 is {trend2}")
+                    trend1 = self.eval_trend(i, 1)
+                    if trend1 != trend2:
+                        self.log(d, f"trend1={trend1}, next ticker")
+                        continue
+                    #self.log(d, f"trend1 is {trend1}")
+                    trend0 = self.eval_trend(i, 0)
+                    if trend0 != trend2:
+                        self.log(d, f"trend0={trend0}, next ticker")
+                        continue
+                    self.log(d, f"{d.datetime.datetime(0).isoformat()} trends are {trend0}, {trend1}, {trend2}")
+                else:
+                    trend2 = self.eval_trend(i, 2)
+                    trend1 = self.eval_trend(i, 1)
+                    trend0 = self.eval_trend(i, 0)
+                    self.log(d, f"{d.datetime.datetime(0).isoformat()} trends are {trend0}, {trend1}, {trend2}")
+                    if not ((trend2 == 4 or trend2 == -4) and trend0 == trend2 and trend1 == trend2):
+                        continue
 
                 signal = 0
-                if trend2 == 4 and d.close[0] < d.open[0]:
+                if trend0 == 4 and d.close[0] < d.open[0]:
                     signal = 1
-                elif trend2 == -4 and d.close[0] > d.open[0]:
+                elif trend0 == -4 and d.close[0] > d.open[0]:
                     signal = -1
 
                 if signal != 0:
                     bracket = []
-                    #self.log(d, f"Prev {self.prev_trend0[i]}, current {trend0}")
-                    #if self.prev_trend0[i] == trend0:
-                    #    return
+                    self.log(d, f"Prev {self.prev_trend0[i]}, current {trend0}")
+                    if self.prev_trend0[i] == trend0:
+                        return
                     # only enter position if trend is changed recently
                     self.prev_trend0[i] = trend0
-                    pos_size = self.qty[i] #self.calculate_position_size(d, abs(d.close[0] - new_stop_price))
-                    if signal == 1:
-                        # go long
-                        bracket = self.buy_bracket(data=d,
-                            size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
-                    elif signal == -1:
-                        # go short
-                        bracket = self.sell_bracket(data=d,
-                            size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
-                    
-                    self.log(d, '%s CREATE (%d), %.3f at %.3f, stop (%d) at %.3f' % 
-                        ("BUY" if bracket[0].isbuy() else "SELL", bracket[0].ref, bracket[0].size, bracket[0].created.price, bracket[1].ref, bracket[1].created.price))
-                    self.order_refs[d] = {
-                        'main': bracket[0],
-                        'stop': bracket[1],
-                        'limit': bracket[2]
-                    }
+
+                    if self.params.trade['send_signals']:
+                        msg = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}    {d.ticker}:    {"BUY" if signal == 1 else "SELL"}"
+                        self.broker.post_message(msg)
+
+                    if self.params.trade['send_orders']:
+                        pos_size = self.qty[i] #self.calculate_position_size(d, abs(d.close[0] - new_stop_price))
+                        if signal == 1:
+                            # go long
+                            bracket = self.buy_bracket(data=d,
+                                size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
+                        elif signal == -1:
+                            # go short
+                            bracket = self.sell_bracket(data=d,
+                                size=pos_size, exectype=bt.Order.Market, stopprice=new_stop_price, limitexec=None)
+                        
+                        self.log(d, '%s CREATE (%d), %.3f at %.3f, stop (%d) at %.3f' % 
+                            ("BUY" if bracket[0].isbuy() else "SELL", bracket[0].ref, bracket[0].size, bracket[0].created.price, bracket[1].ref, bracket[1].created.price))
+                        self.order_refs[d] = {
+                            'main': bracket[0],
+                            'stop': bracket[1],
+                            'limit': bracket[2]
+                        }
 
             elif pos:
                 old_stop = self.order_refs[d]['stop']

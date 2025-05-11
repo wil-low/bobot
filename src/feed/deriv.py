@@ -36,7 +36,7 @@ class DerivLiveData(BobotLiveDataBase):
             ws.send(data)
 
         def on_message(ws, message):
-            self.log(f"datafeed: {message}")
+            #self.log(f"datafeed: {message}")
             data = json.loads(message)
             if "error" in data:
                 self.log(f"ERROR in {data['msg_type']}: {data['error']['message']}")
@@ -46,6 +46,7 @@ class DerivLiveData(BobotLiveDataBase):
                     self.log(data)
                     self.log(f"Historical candles: {len(data['candles'])}")
                     for candle in data['candles']:
+                        candle['volume'] = 0
                         self.ohlc['close'] = candle['close']
                         self.md.put(candle)
                     self.reset_ohlc()
@@ -60,14 +61,12 @@ class DerivLiveData(BobotLiveDataBase):
                     epoch = self.ohlc['epoch']
                     if epoch % self.granularity == 0:
                         if self.last_ts < epoch:
-                            self.log(str(self.ohlc))
+                            self.log(f"New bar {epoch}: {str(self.ohlc)}")
                             self.md.put(self.ohlc.copy())  # Use copy to avoid overwriting
                             self.last_ts = epoch           # ✅ only update after queuing
                             self.reset_ohlc()
-                            self.log(f"New bar queued for epoch: {epoch}")
                         else:
                             self.log(f"Duplicate epoch skipped: {epoch}")
-                        self.realtime_md = True
 
         def on_error(ws, message):
             self.log(f"[DerivLiveData] on_error: {str(message)}")
@@ -88,34 +87,3 @@ class DerivLiveData(BobotLiveDataBase):
         self.thread = threading.Thread(target=run_ws)
         self.thread.daemon = True
         self.thread.start()
-
-    def islive(self):
-        return True
-
-    def _load(self):
-        #self.log(f"_load {self.symbol}")
-        if self._candle_consumed:
-            try:
-                self._last_candle = self.md.get(timeout=0.1)
-                self._candle_consumed = False
-            except queue.Empty:
-                return None
-
-        # Return same candle until Backtrader accepts it
-        c = self._last_candle
-
-        #self.log(c)
-
-        dt = datetime.fromtimestamp(c['epoch'], timezone.utc)
-        self.lines.datetime[0] = bt.date2num(dt)
-        self.lines.open[0] = float(c['open'])
-        self.lines.high[0] = float(c['high'])
-        self.lines.low[0] = float(c['low'])
-        self.lines.close[0] = float(c['close'])
-        self.lines.volume[0] = 1 if self.realtime_md else 0
-
-        #dt = datetime.now(timezone.utc)
-        #self.log(f"diff from now: {bt.date2num(dt)} - {self.lines.datetime[0]} = {bt.date2num(dt) - self.lines.datetime[0]}")
-
-        self._candle_consumed = True  # Only set to True after setting lines
-        return True

@@ -32,9 +32,8 @@ class OKXLiveData(BobotLiveDataBase):
 
     def start(self):
         super().start()
-        print("OKXLive start")
+        print(f"OKXLive start {self.ticker} {self.bar}")
         self.fetch_history()
-        #self._start_ws()
 
     def fetch_history(self):
         """
@@ -66,7 +65,7 @@ class OKXLiveData(BobotLiveDataBase):
             if candle[8] == "1":  # completed candle
                 ts = int(candle[0])
                 c = {
-                    "epoch": ts / 1000,
+                    "epoch": int(ts / 1000),
                     "open": float(candle[1]),
                     "high": float(candle[2]),
                     "low": float(candle[3]),
@@ -75,8 +74,10 @@ class OKXLiveData(BobotLiveDataBase):
                 }
                 self.last_epoch = c['epoch']
                 self.ohlc['close'] = c['close']
+                #self.log(f"Hist bar queued for epoch: {self.last_epoch}")
                 self.md.put(c)
         self.last_epoch += self.granularity
+        self.log(f"last_epoch: {self.last_epoch}")
         self.reset_ohlc()
         self._start_ws()
 
@@ -99,7 +100,7 @@ class OKXLiveData(BobotLiveDataBase):
             ws.send(s)
 
         def on_message(ws, message):
-            #print(f"datafeed: {message}")
+            #self.log(f"datafeed: {message}")
             if message == 'pong':
                 return
             data = json.loads(message)
@@ -111,20 +112,19 @@ class OKXLiveData(BobotLiveDataBase):
             if "arg" in data and "data" in data:
                 for item in data["data"]:
                     if item['lastSz'] != "0":
-                        self.update_ohlc(int(item['ts']) / 1000, float(item['last']))
-                        epoch = self.ohlc['epoch']
-                        self.log(f"{self.granularity}: epoch {epoch}, last {self.last_epoch}")
+                        epoch = int(item['ts']) / 1000
+                        epoch = int(epoch / self.granularity) * self.granularity
+                        self.update_ohlc(epoch, float(item['last']))
+                        #self.log(f"{self.granularity}: epoch {epoch}, last {self.last_epoch}")
                         if epoch >= self.last_epoch:
-                            self.last_epoch += self.granularity
                             if self.last_ts < epoch:
-                                self.log(str(self.ohlc))
+                                self.log(f"New bar {epoch}: {str(self.ohlc)}")
                                 self.md.put(self.ohlc.copy())  # Use copy to avoid overwriting
                                 self.last_ts = epoch           # ✅ only update after queuing
                                 self.reset_ohlc()
-                                self.log(f"New bar queued for epoch: {epoch}")
                             else:
                                 self.log(f"Duplicate epoch skipped: {epoch}")
-                            self.realtime_md = True
+                            self.last_epoch += self.granularity
 
         def on_error(ws, message):
             self.log(f"[OKXLiveData] on_error: {repr(message)}")

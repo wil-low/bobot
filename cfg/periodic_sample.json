@@ -9,18 +9,20 @@
         "channel_id": "<CHANNEL_ID>"
     },
     "trade": {
+        "broker": "Deriv",
         "send_signals": false,
         "send_orders": true,
         "cash": 100,
         "min_payout": 0.75,
         "stake": 10,
-        "expiration_min": 15
+        "expiration_min": 15,
+        "leverage": 250,
+        "margin_qty": 50
     },
     "feed": {
+        "broker": "Deriv",
         "history_size": 30,
-        "timeframe_min": [
-            5
-        ],
+        "timeframe_min": [5],
         "year": 2024,
         "tickers": [
             "WLDEUR"

@@ -34,17 +34,17 @@ class BobotLiveDataBase(bt.feeds.DataBase):
     def log(self, txt, dt=None):
         ''' Logging function for this feed'''
         ticker = self.symbol
+        tf = self.timeframe_min
         if self.logger:
-            self.logger.debug('%-10s: %s' % (ticker, txt))
+            self.logger.debug('%-10s,%-3d: %s' % (ticker, tf, txt))
         else:
-            print('%-10s: %s' % (ticker, txt))
+            print('%-10s,%-3d: %s' % (ticker, tf, txt))
 
     def __init__(self, logger, symbol, granularity, history_size):
         self.logger = logger
         self.symbol = symbol
         self.history_size = history_size
         self.granularity = granularity
-        self.realtime_md = False
         self.md = queue.Queue()
         self._last_candle = None
         self._candle_consumed = True
@@ -78,7 +78,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         self.lines.high[0] = float(c['high'])
         self.lines.low[0] = float(c['low'])
         self.lines.close[0] = float(c['close'])
-        self.lines.volume[0] = 1 if self.realtime_md else 0
+        self.lines.volume[0] = c['volume']
 
         #dt = datetime.now(timezone.utc)
         #self.log(f"diff from now: {bt.date2num(dt)} - {self.lines.datetime[0]} = {bt.date2num(dt) - self.lines.datetime[0]}")
@@ -88,7 +88,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
 
     def keep_alive(self, message):
         def send_ping():
-            self.log(f"{self.symbol}: send_ping")
+            #self.log(f"send_ping")
             if self.ws:
                 try:
                     if len(message) > 0:
@@ -119,13 +119,15 @@ class BobotLiveDataBase(bt.feeds.DataBase):
             'open': self.ohlc['close'],
             'high': self.ohlc['close'],
             'low': self.ohlc['close'],
-            'close': None
+            'close': None,
+            'volume': 0
         }
 
     def update_ohlc(self, epoch, px):
         #self.log(f"update_ohlc {epoch}, {px}")
         self.ohlc['epoch'] = epoch
         self.ohlc['close'] = px
+        self.ohlc['volume'] = 1
         if self.ohlc['high'] is None or px > self.ohlc['high']:
             self.ohlc['high'] = px
         if self.ohlc['low'] is None or px < self.ohlc['low']:

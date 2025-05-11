@@ -53,7 +53,7 @@ def run_bot():
                 data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
             if config['feed']['provider'] == "OKX":
                 data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
-                data.timeframe_min = gran 
+            data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
 
