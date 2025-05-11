@@ -86,14 +86,17 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         self._candle_consumed = True  # Only set to True after setting lines
         return True
 
-    def keep_alive(self):
+    def keep_alive(self, message):
         def send_ping():
             self.log(f"{self.symbol}: send_ping")
             if self.ws:
                 try:
-                    self.ws.send('ping')
-                    #self.ws.sock.ping()
+                    if len(message) > 0:
+                        self.ws.send(message)
+                    else:
+                        self.ws.sock.ping()
                 except websocket.WebSocketConnectionClosedException:
+                    self.log("ping: WebSocketConnectionClosedException, exiting")
                     os._exit(1)
             else:
                 self.log("ping: WebSocket not connected")
@@ -120,7 +123,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         }
 
     def update_ohlc(self, epoch, px):
-        self.log(f"update_ohlc {epoch}, {px}")
+        #self.log(f"update_ohlc {epoch}, {px}")
         self.ohlc['epoch'] = epoch
         self.ohlc['close'] = px
         if self.ohlc['high'] is None or px > self.ohlc['high']:

@@ -83,7 +83,7 @@ class OKXLiveData(BobotLiveDataBase):
     def _start_ws(self):
         def on_open(ws):
             #self.log("WebSocket connected.")
-            self.keep_alive()
+            self.keep_alive('ping')
             # Subscribe to the candlestick channel
             params = {
                 "op": "subscribe",

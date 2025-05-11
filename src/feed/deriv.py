@@ -2,6 +2,7 @@ import json
 import queue
 import threading
 import websocket
+import backtrader as bt
 from datetime import datetime, timezone
 from feed.datafeed import BobotLiveDataBase
 
@@ -21,7 +22,7 @@ class DerivLiveData(BobotLiveDataBase):
     def _start_ws(self):
         def on_open(ws):
             self.log("WebSocket connected.")
-            self.keep_alive()
+            self.keep_alive(json.dumps({'ping': 1}))
             data = json.dumps({
                 "ticks_history": self.symbol,
                 "adjust_start_time": 1,
