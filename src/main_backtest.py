@@ -104,6 +104,7 @@ def run_bot():
         cerebro.broker.setcash(config['trade']['cash'])
         cerebro.broker.set_slippage_perc(0.0003)
         cerebro.broker.setcommission(commission=0, leverage=config['trade']['leverage'])
+        cerebro.broker.post_message = lambda msg: 1
 
     # Add strategy
     if config["strategy"]["name"] == 'RSIPowerZones':
