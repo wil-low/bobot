@@ -299,6 +299,7 @@ class KissIchimoku(bt.Strategy):
     params = (
         ('trade', {}),
         ('max_risk_percent', 5),
+        ('enter_at_reverse', True),
         ('logger', None),
     )
 
@@ -448,6 +449,7 @@ class KissIchimoku(bt.Strategy):
                     trend0 = self.eval_trend(i, 0)
                     if trend0 != trend2:
                         self.log(d, f"trend0={trend0}, next ticker")
+                        self.prev_trend0[i] = trend0
                         continue
                     self.log(d, f"{d.datetime.datetime(0).isoformat()} trends are {trend0}, {trend1}, {trend2}")
                 else:
@@ -456,13 +458,20 @@ class KissIchimoku(bt.Strategy):
                     trend0 = self.eval_trend(i, 0)
                     self.log(d, f"{d.datetime.datetime(0).isoformat()} trends are {trend0}, {trend1}, {trend2}")
                     if not ((trend2 == 4 or trend2 == -4) and trend0 == trend2 and trend1 == trend2):
+                        self.prev_trend0[i] = trend0
                         continue
 
                 signal = 0
-                if trend0 == 4 and d.close[0] < d.open[0]:
-                    signal = 1
-                elif trend0 == -4 and d.close[0] > d.open[0]:
-                    signal = -1
+                if self.params.enter_at_reverse:
+                    if trend0 == 4 and d.close[0] < d.open[0]:
+                        signal = 1
+                    elif trend0 == -4 and d.close[0] > d.open[0]:
+                        signal = -1
+                    else:
+                        self.log(d, "No reverse bar")
+                        self.prev_trend0[i] = 100
+                else:
+                    signal = 1 if trend0 == 4 else -1
 
                 if signal != 0:
                     bracket = []
