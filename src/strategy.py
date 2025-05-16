@@ -482,7 +482,7 @@ class KissIchimoku(bt.Strategy):
                     self.prev_trend0[i] = trend0
 
                     if self.params.trade['send_signals']:
-                        msg = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}    {d.ticker}:    {"BUY" if signal == 1 else "SELL"}"
+                        msg = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}    {d.ticker}:    {'BUY' if signal == 1 else 'SELL'}"
                         self.broker.post_message(msg)
 
                     if self.params.trade['send_orders']:
