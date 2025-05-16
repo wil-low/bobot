@@ -22,7 +22,7 @@ class DerivLiveData(BobotLiveDataBase):
     def _start_ws(self):
         def on_open(ws):
             self.log("WebSocket connected.")
-            self.keep_alive(json.dumps({'ping': 1}))
+            self.keep_alive(json.dumps({"forget": "00000000000000000000000000000000"}))
             data = json.dumps({
                 "ticks_history": self.symbol,
                 "adjust_start_time": 1,
