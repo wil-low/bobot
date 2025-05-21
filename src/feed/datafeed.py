@@ -88,7 +88,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
 
     def keep_alive(self, message):
         def send_ping():
-            #self.log(f"send_ping")
+            #self.log(f"send_ping {message}")
             if self.ws:
                 try:
                     if len(message) > 0:
