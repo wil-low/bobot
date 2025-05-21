@@ -5,14 +5,14 @@ from statsmodels.tsa.stattools import coint
 
 class CointegratedPairs(bt.Strategy):
     params = (
-        ('ci_n', 100),      # Cointegration test window
+        ('ci_n', 25),       # Cointegration test window
         ('ci_t', 0.05),     # p-value threshold
         ('z_entry', 2.0),   # Z-score entry threshold
         ('pnl_p', 0.5),     # % of expected reversion to target
         ('pnl_t', 5),       # Minimum target PnL threshold
-        ('cash_p', 0.1),    # % of available cash to use
+        ('cash_p', 0.5),    # % of available cash to use
         ('min_hold', 0),    # Minimum holding period in bars
-        ('max_hold', 48),   # Max holding period in bars
+        ('max_hold', 8),    # Max holding period in bars
         ('trade', {}),
         ('logger', None)
     )
@@ -37,7 +37,7 @@ class CointegratedPairs(bt.Strategy):
         self.entry_exec_price = {}
         self.holding_period = 0
         self.entry_beta = None
-        self.target_pnl = None  # <-- Added initialization here
+        self.target_pnl = None
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -136,7 +136,7 @@ class CointegratedPairs(bt.Strategy):
                         best_expected_pnl = expected_pnl
 
         if best_pair:
-            self.log(best_data0, f"best_pair found")
+            self.log(best_data0, f"best_pair found: {best_data0.ticker} - {best_data1.ticker}")
 
             price0 = best_data0.close[0]
             price1 = best_data1.close[0]
@@ -150,11 +150,19 @@ class CointegratedPairs(bt.Strategy):
                 return
 
             if best_z > 0:
-                self.sell(data=best_data0, size=size0)
-                self.buy(data=best_data1, size=size1)
+                if self.params.trade["send_orders"]:
+                    self.sell(data=best_data0, size=size0)
+                    self.buy(data=best_data1, size=size1)
+                else:
+                    self.log(best_data0, f"SELL {size0}")
+                    self.log(best_data1, f"BUY  {size1}")
             else:
-                self.buy(data=best_data0, size=size0)
-                self.sell(data=best_data1, size=size1)
+                if self.params.trade["send_orders"]:
+                    self.buy(data=best_data0, size=size0)
+                    self.sell(data=best_data1, size=size1)
+                else:
+                    self.log(best_data0, f"BUY  {size0}")
+                    self.log(best_data1, f"SELL {size1}")
 
             self.active_trade = (best_data0, best_data1)
             self.entry_price = (best_data0.close[0], best_data1.close[0])
@@ -192,8 +200,9 @@ class CointegratedPairs(bt.Strategy):
                 pl_close = -pnl >= self.target_pnl / 2
             if self.holding_period >= self.p.min_hold and (pl_close or self.holding_period >= self.p.max_hold):
                 self.log(data0, f"{data0.datetime.datetime(0).isoformat()}: Close positions")
-                for d in [data0, data1]:
-                    self.close(d)
+                if self.params.trade["send_orders"]:
+                    for d in [data0, data1]:
+                        self.close(d)
                 self.active_trade = None
                 self.entry_price = None
                 self.entry_exec_price = {}

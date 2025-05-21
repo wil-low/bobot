@@ -18,7 +18,9 @@ from broker.deriv import DerivBroker
 from broker.okx import OKXBroker
 from feed.deriv import DerivLiveData
 from feed.okx import OKXLiveData
+from feed.bybit import BybitLiveData
 from strategy import Anty, KissIchimoku, RSIPowerZones
+from strategy_stat import CointegratedPairs
 
 def run_bot():
     config = {}
@@ -51,8 +53,10 @@ def run_bot():
             data = None
             if config['feed']['provider'] == "Deriv":
                 data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
-            if config['feed']['provider'] == "OKX":
+            elif config['feed']['provider'] == "OKX":
                 data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
+            elif config['feed']['provider'] == "Bybit":
+                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'])
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
@@ -91,6 +95,8 @@ def run_bot():
         cerebro.addstrategy(Anty, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'KissIchimoku':
         cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'CointegratedPairs':
+        cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
 
     print(f"🔁 Starting live strategy {config['strategy']['name']}...")
     cerebro.run()
