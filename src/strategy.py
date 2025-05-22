@@ -299,7 +299,7 @@ class KissIchimoku(bt.Strategy):
     params = (
         ('trade', {}),
         ('max_risk_percent', 5),
-        ('enter_at_reverse', True),
+        ('enter_at_reverse', False),
         ('logger', None),
     )
 
@@ -392,8 +392,8 @@ class KissIchimoku(bt.Strategy):
         #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
         if not trade.isclosed:
             return
-        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
-                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, portfolio %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getvalue()))
 
     def next(self):
         # only have 1 position across all symbols
@@ -423,7 +423,7 @@ class KissIchimoku(bt.Strategy):
                     self.log(d, "Calculate qty on %s: o %.5f, h %.5f, l %.5f, c %.5f, stop %.5f" %
                         (d.datetime.datetime(0).isoformat(), d.open[0], d.high[0], d.low[0], d.close[0], new_stop_price)
                     )
-                    self.qty[i] = int(self.params.trade['margin_qty'] * self.params.trade["leverage"] / d.close[0])
+                    self.qty[i] = self.params.trade['margin_qty'] * self.params.trade["leverage"] / d.close[0]
                     self.log(d, f"Fixed order qty is {self.qty[i]}")
 
                 #self.log(d, "eval_trend %s: o %.5f, h %.5f, l %.5f, c %.5f" %
@@ -475,9 +475,9 @@ class KissIchimoku(bt.Strategy):
 
                 if signal != 0:
                     bracket = []
-                    self.log(d, f"Prev {self.prev_trend0[i]}, current {trend0}")
-                    if self.prev_trend0[i] == trend0:
-                        return
+                    #self.log(d, f"Prev {self.prev_trend0[i]}, current {trend0}")
+                    #if self.prev_trend0[i] == trend0:
+                    #    return
                     # only enter position if trend is changed recently
                     self.prev_trend0[i] = trend0
 
