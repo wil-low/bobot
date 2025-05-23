@@ -178,3 +178,5 @@ cfg/*
 datasets/
 analysis/images
 analysis/csv
+
+alpha/work/*
