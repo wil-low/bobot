@@ -2,12 +2,16 @@
 
 from datetime import datetime
 import json
+import os
 import numpy as np
 import pandas as pd
 
 class AlphaStrategy:
     def __init__(self, alloc_fn, initial_value, today, tickers):
-        self.alloc_fn = alloc_fn
+        output_dir = f"work/{today}"
+        os.makedirs(output_dir, exist_ok=True)
+        self.alloc_fn = f"{output_dir}/{alloc_fn}"
+
         self.initial_value = initial_value
         self.portfolio = {
             "name": self.__class__.__name__,
@@ -19,7 +23,7 @@ class AlphaStrategy:
         self.tickers = tickers
         self.data = {}
         for t in self.tickers:
-            fn = f'datasets/{today}/{t}.csv'
+            fn = f"{output_dir}/csv/{t}.csv"
             try:
                 df = pd.read_csv(fn, parse_dates=['date'], index_col='date')
                 if df.empty:
@@ -108,23 +112,30 @@ class RisingAssets(AlphaStrategy):
             #print(f"{ticker}: {score}, {volatility.iloc[-1]}")
             top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
         
+        self.portfolio['tickers'] = {}
         vol_sum = 0
         top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
         for item in top_sorted:
-            print(f"{item['ticker']}: {item['rev_vol']}, {value}")
+            #print(f"{item['ticker']}: {item['rev_vol']}, {value}")
             vol_sum += item['rev_vol']
 
         for item in top_sorted:
+            close = self.data[item['ticker']].close.iloc[-1]
             alloc_cash = value * item['rev_vol'] / vol_sum
-            alloc = alloc_cash / self.data[item['ticker']].close.iloc[-1]
+            alloc = alloc_cash / close
             if alloc < 1 and alloc > 0.5:
                 alloc = 1
             else:
                 alloc = int(alloc)
-            self.portfolio['tickers'][item['ticker']]['alloc'] = alloc
+            print(f"{item['ticker']}: px {close}, {alloc}")
+            self.portfolio['tickers'][item['ticker']] = {
+                'alloc': alloc,
+                'close': close,
+                'buy_limit': close
+            }
+        self.portfolio['value'] = self.get_value()
         print("Portfolio after alloc:")
         print(self.portfolio)
-        print(self.get_value())
 
 
 class DynamicTreasures(AlphaStrategy):
@@ -147,27 +158,40 @@ class DynamicTreasures(AlphaStrategy):
                     #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
                     if sc:
                         score += 5  # % allocation
-                print(f"{ticker}: {score}")
+                #print(f"{ticker}: {score}")
                 top.append({'ticker': ticker, 'score': score})
         
+        self.portfolio['tickers'] = {}
         for item in top:
             alloc = 0
             if item['score'] > 0:
+                close = self.data[item['ticker']].close.iloc[-1]
                 alloc_cash = value * item['score'] / 100
-                alloc = alloc_cash / self.data[item['ticker']].close.iloc[-1]
+                alloc = alloc_cash / close
                 alloc = int(alloc)
-            self.portfolio['tickers'][item['ticker']]['alloc'] = alloc
+                print(f"{item['ticker']}: px {close}, {alloc}")
+                self.portfolio['tickers'][item['ticker']] = {
+                    'alloc': alloc,
+                    'close': close,
+                    'buy_limit': close
+                }
 
         # remains alloc
         alloc_cash = self.initial_value - self.get_value()
-        alloc = alloc_cash / self.data[self.remains].close.iloc[-1]
+        close = self.data[self.remains].close.iloc[-1]
+        alloc = alloc_cash / close
         alloc = int(alloc)
         if alloc > 0:
-            self.portfolio['tickers'][self.remains]['alloc'] = alloc
+            self.portfolio['tickers'][self.remains] = {
+                'alloc': alloc,
+                'close': close,
+                'buy_limit': close
+            }
+            print(f"{self.remains}: px {close}, {alloc} - remains")
        
+        self.portfolio['value'] = self.get_value()
         print("Portfolio after alloc:")
         print(self.portfolio)
-        print(self.get_value())
 
 
 class ETFAvalanches(AlphaStrategy):
@@ -195,31 +219,42 @@ class ETFAvalanches(AlphaStrategy):
                             rev_vol = 1 / volatility.iloc[-1]
                 top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
 
+        self.portfolio['tickers'] = {}
         vol_sum = 0
         top_sorted = sorted(top, key=lambda x: x['rev_vol'], reverse=False)[:5]
         for item in top_sorted:
-            print(f"{item['ticker']}: {item['rev_vol']}, {score}, {value}")
+            #print(f"{item['ticker']}: {item['rev_vol']}, {score}, {value}")
             vol_sum += item['rev_vol']
 
         for item in top_sorted:
             alloc = 0
             if item['rev_vol'] > 0:
+                close = self.data[item['ticker']].close.iloc[-1]
                 alloc_cash = value * item['rev_vol'] / vol_sum
-                alloc = alloc_cash / self.data[item['ticker']].close.iloc[-1]
+                alloc = alloc_cash / close
                 alloc = int(alloc)
-            self.portfolio['tickers'][item['ticker']]['alloc'] = alloc
-            self.portfolio['tickers'][item['ticker']]['sell_limit'] = score
-
+                print(f"{item['ticker']}: px {close}, {alloc}")
+                self.portfolio['tickers'][item['ticker']] = {
+                    'alloc': alloc,
+                    'close': close,
+                    'sell_limit': close
+                }
         # remains alloc
         alloc_cash = self.initial_value - self.get_value()
-        alloc = alloc_cash / self.data[self.remains].close.iloc[-1]
+        close = self.data[self.remains].close.iloc[-1]
+        alloc = alloc_cash / close
         alloc = int(alloc)
         if alloc > 0:
-            self.portfolio['tickers'][self.remains]['alloc'] = alloc
-       
+            self.portfolio['tickers'][self.remains] = {
+                'alloc': alloc,
+                'close': close,
+                'buy_limit': close
+            }
+            print(f"{self.remains}: px {close}, {alloc} - remains")
+
+        self.portfolio['value'] = self.get_value()
         print("Portfolio after alloc:")
         print(self.portfolio)
-        print(self.get_value())
 
     def close(self, end_of_week):
         print(f"\n{self.__class__.__name__}: close {self.initial_value}")
@@ -250,9 +285,7 @@ class MeanReversion(AlphaStrategy):
             for ticker, info in self.portfolio['tickers'].items():
                 if ticker != self.remains:
                     d = self.data[ticker]
-                    score = 0
-                    rev_vol = 0
-                    print(f"{ticker} check")
+                    #print(f"{ticker} check")
                     if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
                         if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
                             weekly_series = d.close.resample('W').last()
@@ -260,38 +293,44 @@ class MeanReversion(AlphaStrategy):
                             rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
                             #exit()
                             if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
-                                print(f"allocate {ticker}: rsi {rsi}")
+                                #print(f"allocate {ticker}: rsi {rsi}")
                                 daily_return = d.close / d.close.shift(1)
                                 volatility = daily_return.rolling(window=100).std()
-                                top.append({'ticker': ticker, 'score': score, 'volatility': volatility.iloc[-1]})
+                                top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
 
             top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:10]
-            print(top_sorted)
+            #print(top_sorted)
             alloc_cash = value / 10
-            print(alloc_cash)
-            for item in top_sorted:
-                print(f"{item['ticker']}=> {item['volatility']}, {item['score']}, {value}")
 
+            self.portfolio['tickers'] = {}
             for item in top_sorted:
                 alloc = 0
                 if item['volatility'] > 0:
-                    alloc = alloc_cash / self.data[item['ticker']].close.iloc[-1]
+                    close = self.data[item['ticker']].close.iloc[-1]
+                    alloc = alloc_cash / close
                     alloc = int(alloc)
-                    print(f"{item['ticker']}: px {self.data[item['ticker']].close.iloc[-1]}, {alloc}")
-                self.portfolio['tickers'][item['ticker']]['alloc'] = alloc
-                self.portfolio['tickers'][item['ticker']]['buy_limit'] = score
-
+                    print(f"{item['ticker']}: px {close}, {alloc}")
+                self.portfolio['tickers'][item['ticker']] = {
+                    'alloc': alloc,
+                    'close': close,
+                    'buy_limit': close
+                }
             # remains alloc
             alloc_cash = self.initial_value - self.get_value()
-            alloc = alloc_cash / self.data[self.remains].close.iloc[-1]
+            close = self.data[self.remains].close.iloc[-1]
+            alloc = alloc_cash / close
             alloc = int(alloc)
             if alloc > 0:
-                self.portfolio['tickers'][self.remains]['alloc'] = alloc
-                print(f"{self.remains}: {alloc}")
-           
+                self.portfolio['tickers'][self.remains] = {
+                    'alloc': alloc,
+                    'close': close,
+                    'buy_limit': close
+                }
+                print(f"{self.remains}: px {close}, {alloc} - remains")
+
+            self.portfolio['value'] = self.get_value()
             print("Portfolio after alloc:")
             print(self.portfolio)
-            print(self.get_value())
 
     def close(self, end_of_week):
         print(f"\n{self.__class__.__name__}: close {self.initial_value}, end_of_week {end_of_week}")

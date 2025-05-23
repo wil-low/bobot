@@ -58,7 +58,7 @@ def dl_datasets():
     today = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=396)).strftime("%Y-%m-%d")  # ~13 months
 
-    output_dir = f"alpha/datasets/{today}"
+    output_dir = f"alpha/work/{today}/csv"
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Start date: {start_date}")
