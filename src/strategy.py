@@ -3,6 +3,8 @@
 from datetime import datetime
 import json
 import backtrader as bt
+from indicators.connorsrsi import ConnorsRSI
+from indicators.hv import HistoricalVolatility
 
 class Anty(bt.Strategy):
     params = (
@@ -568,3 +570,155 @@ class KissIchimoku(bt.Strategy):
         self.log(d, f'calculate_position_size: risk_value {risk_value}, diff {stop_diff}, risk {risk_position_size}, margin {margin_position_size}, cash {self.broker.getcash()}')
         result = min(risk_position_size, margin_position_size)
         return result
+
+
+class CRSIShort(bt.Strategy):
+    # Short Selling Stocks with ConnorsRSI
+
+    Exit_CRSI_20, Exit_CRSI_30, Exit_CRSI_40, Exit_SMA5, Exit_First_Down_Close = range(5)
+
+    params = (
+        ('trade', {}),
+        ('price_above', 5),  # The stock’s price closes above $X per share.
+        ('avg_volume_above', 500000),  # The average volume over the past 21 trading days (approximately one month) is greater than N shares.
+        ('crsi_above', 85),  # The stock closes with a ConnorsRSI(3,2,100) value greater than X, where X is 75, 80, 85, 90 or 95.
+        ('hv_above', 40),  # The stock’s 100‐day Historical Volatility, or HV(100), is greater than 40.
+        ('adx_above', 40),  # The stock’s 10‐day Average Directional Index, or ADX(10), value is greater than 40.
+        ('highest_n', 10),  # Today’s High is the highest high in the past N days, where N is 7, 10 or 13.
+
+        # If the previous day was a Setup, then we Enter a trade by:
+        ('percent_entry', 6),  # Submitting a limit order to short the stock at a price Y % above yesterday’s close, where Y is 2, 4, 6, 8, or 10.
+        ('variable_entry', True),   # Var. Entry Limits is Yes (Y) when the test used an entry limit of 1.5 times normal for stocks that were
+                                    # above the MA(200). When the same limit was used regardless of whether the price was above or below
+                                    # the MA(200), this column contains a No (N). We see many more Y’s than N’s, indicating that using
+                                    # variable entry limits was beneficial.
+
+        # After we’ve entered the trade, we Exit using one of the following methods, selected in advance:
+        # a. The stock closes with a ConnorsRSI value less than 20.
+        # b. The stock closes with a ConnorsRSI value less than 30.
+        # c. The stock closes with a ConnorsRSI value less than 40.
+        # d. The closing price of the stock is less than the 5‐day moving average, or MA(5).
+        # e. The closing price of the stock is lower than the previous day’s close. We typically refer to this exit as the First Down Close.
+        ('exit_rule', Exit_SMA5),
+        ('logger', None),
+        ('leverage', None),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        ticker = ''
+        tf = 0
+        if data:
+            ticker = data.ticker
+            tf = data.timeframe_min
+        if self.params.logger:
+            self.params.logger.debug('%-10s,%-3d: %s' % (ticker, tf, txt))
+        else:
+            print('%-10s,%-3d: %s' % (ticker, tf, txt))
+
+    def __init__(self):
+        self.log(None, f"params: {self.params._getkwargs()}")
+        self.o = dict()
+        self.avg_volume = dict()
+        self.crsi = dict()
+        self.hv = dict()
+        self.adx = dict()
+        self.highest = dict()
+        self.sma5 = dict()
+        self.sma200 = dict()
+        for d in self.datas:
+            self.avg_volume[d] = bt.indicators.Average(d.volume, period=21)
+            self.crsi[d] = ConnorsRSI(d)
+            self.hv[d] = HistoricalVolatility(d, period=100)
+            self.adx[d] = bt.indicators.AverageDirectionalMovementIndex(d, period=10)
+            self.highest[d] = bt.indicators.FindLastIndexHighest(d.close, period=self.params.highest_n)
+            if self.params.exit_rule == self.Exit_SMA5:
+                self.sma5[d] = bt.indicators.MovingAverageSimple(d, period=5)
+            if self.params.variable_entry:
+                self.sma200[d] = bt.indicators.MovingAverageSimple(d, period=200)
+
+    def notify_order(self, order):
+        #self.log(order.data, f"notify_order: {str(order)}")
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+            self.log(order.data, 'Order Canceled/Margin/Rejected')
+
+        self.o[order.data] = None
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+                 (trade.pnl, trade.pnlcomm))
+
+    def next(self):
+        for i, d in enumerate(self.datas):
+            pos = self.getposition(d)
+            # Check if we are in the market
+            if not pos:
+                if self.o.get(d, None) is not None:
+                    self.log(d, f"CANCEL ENTRY ORDER, close {d.close[0]}\n")
+                    self.cancel(self.o[d])
+                else:
+                    # check entry
+                    if d.close[0] < self.params.price_above:
+                        continue
+                    if self.avg_volume[d][0] < self.params.avg_volume_above:
+                        continue
+                    if self.hv[d][0] < self.params.hv_above:
+                        continue
+                    if self.crsi[d][0] < self.params.crsi_above:
+                        continue
+                    # Simply log the closing price of the series from the reference
+                    self.log(d, f"C: {d.close[0]}, hi {d.high[0]}, lo {d.low[0]}; crsi {self.crsi[d][0]}, hv {self.hv[d][0]}, adx {self.adx[d][0]}, highest {self.highest[d][0]}")
+                    if self.adx[d][0] < self.params.adx_above:
+                        continue
+                    if self.highest[d][0] != 0:
+                        continue
+                    entry_offset = self.params.percent_entry
+                    if self.params.variable_entry and d.close[0] > self.sma200[d][0]:
+                        entry_offset *= 1.5
+                    order = self.sell(data=d, exectype=bt.Order.Limit, price=d.close[0] * (100 + entry_offset) / 100)
+                    self.log(d, 'SELL CREATE (%d), %.3f at %.3f\n' % (order.ref, order.size, order.created.price))
+                    self.o[d] = order
+            else:
+                # check exit
+                exit = False
+                if self.params.exit_rule == self.Exit_CRSI_20:
+                    exit = self.crsi[d][0] < 20
+                elif self.params.exit_rule == self.Exit_CRSI_30:
+                    exit = self.crsi[d][0] < 30
+                elif self.params.exit_rule == self.Exit_CRSI_40:
+                    exit = self.crsi[d][0] < 40
+                elif self.params.exit_rule == self.Exit_SMA5:
+                    exit = d.close[0] < self.sma5[d][0]
+                elif self.params.exit_rule == self.Exit_First_Down_Close:
+                    exit = d.close[0] < d.close[-1]
+                else:
+                    raise NotImplementedError(f"exit_rule={self.params.exit_rule}")
+                
+                if exit:
+                    self.log(d, 'EXIT POSITION, size %.2f, %.6f' % (pos.size, d.close[0]))
+                    self.close(data=d)

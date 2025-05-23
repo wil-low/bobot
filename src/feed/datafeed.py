@@ -26,6 +26,20 @@ class HistDataCSVData(bt.feeds.GenericCSVData):
             return False  # Skip malformed lines
         return super()._loadline(linetokens)
 
+class TiingoCSVData(bt.feeds.GenericCSVData):
+	params = (
+		('timeframe', bt.TimeFrame.Days),
+		('headers', True),
+		('separator', ','),
+		('dtformat', '%Y-%m-%d'),
+		('close', 6),
+		('high', 7),
+		('low', 8),
+		('open', 9),
+		('volume', 10),
+		('openinterest', -1),
+		('reverse', False)
+	)
 
 class BobotLiveDataBase(bt.feeds.DataBase):
     """

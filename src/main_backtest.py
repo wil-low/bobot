@@ -15,8 +15,8 @@ sys.path.append(parent_dir + '/backtrader')
 import backtrader as bt
 
 from broker.bo import BinaryOptionsBroker
-from feed.datafeed import HistDataCSVData
-from strategy import Anty, KissIchimoku, RSIPowerZones
+from feed.datafeed import HistDataCSVData, TiingoCSVData
+from strategy import Anty, KissIchimoku, RSIPowerZones, CRSIShort
 from strategy_stat import CointegratedPairs
 
 def logged_print(message):
@@ -51,7 +51,7 @@ def run_bot():
     tf = []
 
     for timeframe in config['feed']['timeframe_min']:
-        if timeframe <= 240:
+        if timeframe <= 1440:
             tf.append((bt.TimeFrame.Minutes, timeframe, timeframe))
         else:
             raise NotImplementedError
@@ -80,16 +80,42 @@ def run_bot():
         symbol = symbol.replace('frx', '')
 
         for timeframe, compression, timeframe_min in tf:
-            data = HistDataCSVData(
-                dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
-                # Do not pass values before this date
-                #fromdate=datetime.datetime(2005, 1, 1),
-                # Do not pass values after this date
-                #todate=datetime(2023, 2, 27),
-            )
+            data = None
+            if config['feed']['provider'] == "HistData":
+                data = HistDataCSVData(
+                    dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
+                    # Do not pass values before this date
+                    #fromdate=datetime.datetime(2005, 1, 1),
+                    # Do not pass values after this date
+                    #todate=datetime(2023, 2, 27),
+                )
+            elif config['feed']['provider'] == "TiingoS":  # stocks
+                fn = f'datasets/tiingo/{symbol}.csv'
+                data = TiingoCSVData(
+                    dataname=fn,
+                    # Do not pass values before this date
+                    #fromdate=datetime.datetime(2005, 1, 1),
+                    # Do not pass values after this date
+                    #todate=datetime(2023, 2, 27),
+                )
+            elif config['feed']['provider'] == "TiingoC":  # crypto
+                fn = f'datasets/tiingo/{symbol}_M1{config['feed']['year']}.csv'
+                data = HistDataCSVData(
+                    dataname=fn,
+                    # Do not pass values before this date
+                    #fromdate=datetime.datetime(2005, 1, 1),
+                    # Do not pass values after this date
+                    #todate=datetime(2023, 2, 27),
+                )
+            else:
+                raise NotImplementedError(config['feed']['provider'])
+
             data.ticker = symbol
             data.timeframe_min = timeframe_min
-            cerebro.resampledata(data, timeframe=timeframe, compression=compression)
+            if timeframe_min == 1440:
+                cerebro.adddata(data)
+            else:
+                cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
     if config['trade']['broker'] == "BO":
         broker = BinaryOptionsBroker(
@@ -115,6 +141,11 @@ def run_bot():
         cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CointegratedPairs':
         cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'CRSIShort':
+        cerebro.addsizer(bt.sizers.PercentSizer, percents=1)
+        cerebro.addstrategy(CRSIShort, logger=logger, trade=config['trade'])
+    else:
+        raise NotImplementedError(config["strategy"]["name"])
 
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
