@@ -19,6 +19,20 @@ def tiingo_req(ticker, start_date, end_date, token, fn):
     with open(fn, "wb") as f:
         f.write(response.content)
 
+def polygon_daily_req(ticker, start_date, fn):
+    url = f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false&apiKey={token}"
+    print(f"Downloading daily summary from {url}")
+    
+    response = requests.get(url)
+    if response.status_code != 200 or len(response.content) < 1000:
+        print(f"Error downloading {ticker}: {response.text}")
+        if os.path.exists(fn):
+            os.remove(fn)
+        exit(1)
+    
+    with open(fn, "wb") as f:
+        f.write(response.content)
+
 def polygon_req(ticker, start_date, end_date, token, fn):
     url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{start_date}/{end_date}?adjusted=true&sort=asc&apiKey={token}"
     print(f"Downloading {ticker} from {url}")
@@ -44,11 +58,15 @@ def polygon_req(ticker, start_date, end_date, token, fn):
     time.sleep(13)  # 5 API Calls / Minute
 
 def dl_datasets():
-    # === Load tickers from file ===
-    #with open("tickers.txt", "r") as f:
-    #    tickers = [line.strip() for line in f if line.strip()]
+    all_tickers = set()
+    for fn in ['ra', 'dt', 'ea', 'mr']:
+        with open(f"alpha/cfg/{fn}.txt", "r") as f:
+            all_tickers.update([line.strip() for line in f if line.strip()])
 
-    tickers = TICKERS_MR
+    tickers = sorted(list(all_tickers))
+    print(tickers)
+    print(len(tickers))
+    #exit()
 
     # === Token and date setup ===
     token = os.environ.get("TOKEN")

@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 
 class AlphaStrategy:
-    def __init__(self, alloc_fn, initial_value, today, tickers):
+    def __init__(self, fn, initial_value, today):
         output_dir = f"work/{today}"
         os.makedirs(output_dir, exist_ok=True)
-        self.alloc_fn = f"{output_dir}/{alloc_fn}"
+        self.alloc_fn = f"{output_dir}/{fn}.json"
 
         self.initial_value = initial_value
         self.portfolio = {
@@ -20,7 +20,8 @@ class AlphaStrategy:
         }
         self.load_portfolio()
 
-        self.tickers = tickers
+        self.tickers = AlphaStrategy.load_tickers(f"cfg/{fn}.txt")
+        #print(self.tickers)
         self.data = {}
         for t in self.tickers:
             fn = f"{output_dir}/csv/{t}.csv"
@@ -42,6 +43,12 @@ class AlphaStrategy:
 
         # Align by index and drop missing values
         #data = pd.concat([data[tickers[0]], data[tickers[1]]], axis=1, join='inner').dropna()
+
+    @staticmethod
+    def load_tickers(fn):
+        with open(fn, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+        return None
 
     @staticmethod
     def compute_rsi(series, period=2):
@@ -90,8 +97,8 @@ class AlphaStrategy:
 
 class RisingAssets(AlphaStrategy):
 
-    def __init__(self, alloc_fn, initial_value, today, tickers):
-        super().__init__(alloc_fn, initial_value, today, tickers)
+    def __init__(self, initial_value, today):
+        super().__init__('ra', initial_value, today)
 
     def allocate(self):
         print(f"\n{self.__class__.__name__}: allocate")
@@ -140,9 +147,9 @@ class RisingAssets(AlphaStrategy):
 
 class DynamicTreasures(AlphaStrategy):
 
-    def __init__(self, alloc_fn, initial_value, today, tickers):
-        super().__init__(alloc_fn, initial_value, today, tickers)
-        self.remains = tickers[-1]
+    def __init__(self, initial_value, today):
+        super().__init__('dt', initial_value, today)
+        self.remains = self.tickers[-1]
 
     def allocate(self):
         print(f"\n{self.__class__.__name__}: allocate")
@@ -196,9 +203,9 @@ class DynamicTreasures(AlphaStrategy):
 
 class ETFAvalanches(AlphaStrategy):
 
-    def __init__(self, alloc_fn, initial_value, today, tickers):
-        super().__init__(alloc_fn, initial_value, today, tickers)
-        self.remains = tickers[-1]
+    def __init__(self, initial_value, today):
+        super().__init__('ea', initial_value, today)
+        self.remains = self.tickers[-1]
 
     def allocate(self):
         print(f"\n{self.__class__.__name__}: allocate {self.initial_value}")
@@ -272,9 +279,9 @@ class ETFAvalanches(AlphaStrategy):
 
 class MeanReversion(AlphaStrategy):
 
-    def __init__(self, alloc_fn, initial_value, today, tickers):
-        super().__init__(alloc_fn, initial_value, today, tickers)
-        self.remains = tickers[-1]
+    def __init__(self, initial_value, today):
+        super().__init__('mr', initial_value, today)
+        self.remains = self.tickers[-1]
 
     def allocate(self):
         print(f"\n{self.__class__.__name__}: allocate {self.initial_value}")
