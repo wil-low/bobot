@@ -3,7 +3,6 @@ import os
 import time
 import requests
 from datetime import date, datetime, timedelta, timezone
-from tickers import TICKERS_MR
 
 def tiingo_req(ticker, start_date, end_date, token, fn):
     url = f"https://api.tiingo.com/tiingo/daily/{ticker}/prices?startDate={start_date}&format=csv&token={token}"

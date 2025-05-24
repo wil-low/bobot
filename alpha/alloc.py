@@ -3,6 +3,7 @@
 from datetime import datetime
 import json
 import os
+import sqlite3
 import numpy as np
 import pandas as pd
 
@@ -22,16 +23,29 @@ class AlphaStrategy:
 
         self.tickers = AlphaStrategy.load_tickers(f"cfg/{fn}.txt")
         #print(self.tickers)
+
         self.data = {}
+        conn = sqlite3.connect("work/stock.sqlite")
         for t in self.tickers:
-            fn = f"{output_dir}/csv/{t}.csv"
             try:
-                df = pd.read_csv(fn, parse_dates=['date'], index_col='date')
-                if df.empty:
-                    print(f"Warning: {t} data is empty. File contents:")
-                    with open(fn) as f:
-                        print(f.read())
-                    exit(1)
+                query = f"""
+                SELECT *
+                FROM (
+                    SELECT date, close
+                    FROM prices
+                    JOIN tickers ON prices.ticker_id = tickers.id
+                    WHERE tickers.symbol = ? AND date < ?
+                    ORDER BY date DESC
+                    LIMIT 272
+                )
+                ORDER BY date ASC;
+                """
+                df = pd.read_sql_query(query, conn, params=(t, today), parse_dates=['date'])
+                df.set_index('date', inplace=True)
+
+                if len(df) < 21 * 12:
+                    print(f"Warning: {t} not enough rows in DB ({len(df)})")
+                    continue
                 self.data[t] = df
                 item = {
                     "close": df.close.iloc[-1],
@@ -40,6 +54,7 @@ class AlphaStrategy:
                 self.portfolio['tickers'][t] = item
             except FileNotFoundError:
                 pass
+        conn.close()
 
         # Align by index and drop missing values
         #data = pd.concat([data[tickers[0]], data[tickers[1]]], axis=1, join='inner').dropna()
@@ -101,7 +116,7 @@ class RisingAssets(AlphaStrategy):
         super().__init__('ra', initial_value, today)
 
     def allocate(self):
-        print(f"\n{self.__class__.__name__}: allocate")
+        print(f"\n{self.__class__.__name__}: allocate {self.initial_value}")
         top = []
         value = self.get_value(True)
         for ticker, info in self.portfolio['tickers'].items():
@@ -152,7 +167,7 @@ class DynamicTreasures(AlphaStrategy):
         self.remains = self.tickers[-1]
 
     def allocate(self):
-        print(f"\n{self.__class__.__name__}: allocate")
+        print(f"\n{self.__class__.__name__}: allocate {self.initial_value}")
         top = []
         value = self.get_value(True)
         for ticker, info in self.portfolio['tickers'].items():

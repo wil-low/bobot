@@ -11,6 +11,8 @@ def write_tickers(tickers, fn):
 def alpha_alloc(initial_value):
     today = datetime.now().strftime('%Y-%m-%d')
 
+    print(f"alpha_alloc: {today}")
+
     strategy0 = RisingAssets(initial_value * 0.3, today)
     strategy0.allocate()
     #strategy0.save_portfolio()
