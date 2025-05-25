@@ -1,5 +1,6 @@
 # alloc.py
 
+import copy
 from datetime import datetime
 import json
 import os
@@ -8,23 +9,12 @@ import numpy as np
 import pandas as pd
 
 class AlphaStrategy:
-    def __init__(self, logger, fn, initial_value, today):
+    def __init__(self, logger, key, portfolio, today):
+        self.key = key
         self.logger = logger
-        self.abbrev = fn
-        output_dir = f"work/{today}"
-        os.makedirs(output_dir, exist_ok=True)
-        self.alloc_fn = f"{output_dir}/{fn}.json"
+        self.portfolio = portfolio
 
-        self.initial_value = initial_value
-        self.portfolio = {
-            "name": self.__class__.__name__,
-            "date": today,
-            'tickers': {}
-        }
-        self.load_portfolio()
-
-        self.tickers = AlphaStrategy.load_tickers(f"cfg/{fn}.txt")
-        #print(self.tickers)
+        self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
 
         self.data = {}
         conn = sqlite3.connect("work/stock.sqlite")
@@ -49,17 +39,13 @@ class AlphaStrategy:
                     self.log(f"{t} not enough rows in DB ({len(df)})")
                     continue
                 self.data[t] = df
-                item = {
-                    "close": df.close.iloc[-1],
-                    "qty": 0
-                }
-                self.portfolio['tickers'][t] = item
             except FileNotFoundError:
                 pass
         conn.close()
 
-        # Align by index and drop missing values
-        #data = pd.concat([data[tickers[0]], data[tickers[1]]], axis=1, join='inner').dropna()
+        self.portfolio['equity'] = self.compute_equity(self.portfolio)
+        self.allocatable = portfolio['equity'] * 0.97  # reserve for fees
+        self.log(f"========= equity {self.portfolio['equity']}, allocatable {self.allocatable}")
 
     @staticmethod
     def load_tickers(fn):
@@ -85,9 +71,12 @@ class AlphaStrategy:
 
         return rsi
 
-    @staticmethod
-    def compute_portfolio_transition(old_portfolio, new_portfolio):
-        transition = []
+    def print_p(self, portfolio):
+        return json.dumps(portfolio, sort_keys=True)
+
+    def compute_portfolio_transition(self, old_portfolio, new_portfolio):
+        adds = []
+        removes = []
 
         old_tickers = old_portfolio.get('tickers', {})
         new_tickers = new_portfolio.get('tickers', {})
@@ -99,67 +88,74 @@ class AlphaStrategy:
             new_qty = new_tickers.get(ticker, {}).get('qty', 0)
 
             if new_qty > old_qty:
-                transition.append({
+                diff = round(new_qty - old_qty, 2)
+                text = f'Increase {ticker} by {diff}, from {old_qty} to {new_qty}'
+                if self.key == 'mr' and old_qty == 0:
+                    text += ', record entry price'
+                elif self.key == 'ea' and old_qty == 0:
+                    text += f", using sell Day order at {new_tickers[ticker]['close']}"
+                adds.append({
                     'ticker': ticker,
                     'action': 'add',
-                    'qty': new_qty - old_qty,
-                    'text': f'Increase allocation from {old_qty} to {new_qty}'
+                    'qty': diff,
+                    'text': text
                 })
+                new_portfolio['cash'] -= self.data[ticker].close.iloc[-1] * diff
+                #print(ticker, self.data[ticker].close.iloc[-1], diff, 'new_cash increased', new_portfolio['cash'])
             elif new_qty < old_qty:
-                transition.append({
+                diff = round(old_qty - new_qty, 2)
+                text = f'Reduce {ticker} by {diff}, from {old_qty} to {new_qty}'
+                removes.append({
                     'ticker': ticker,
                     'action': 'remove',
-                    'qty': old_qty - new_qty,
-                    'text': f'Reduce allocation from {old_qty} to {new_qty}'
+                    'qty': diff,
+                    'text': text
                 })
+                new_portfolio['cash'] += self.data[ticker].close.iloc[-1] * diff
+                #print(ticker, self.data[ticker].close.iloc[-1], diff, 'new_cash reduced', new_portfolio['cash'])
             # If equal, no action needed
 
-        return transition
+        new_portfolio['equity'] = self.compute_equity(new_portfolio)
+        self.log(f"old_p: {self.print_p(old_portfolio)}")
+        self.log(f"new_p: {self.print_p(new_portfolio)}")
+        return removes + adds
 
     def log(self, txt):
         if self.logger:
-            self.logger.debug('%s: %s' % (self.abbrev, txt))
+            self.logger.debug('%s: %s' % (self.key, txt))
         else:
-            print('%s: %s' % (self.abbrev, txt))
+            print('%s: %s' % (self.key, txt))
 
-    def load_portfolio(self):
-        try:
-            with open(self.alloc_fn) as f:
-                self.portfolio = json.load(f)
-                #print(self.portfolio)
-        except FileNotFoundError:
-            self.log("Starting with empty portfolio")
-
-    def save_portfolio(self):
-        self.portfolio['value'] = self.get_value()
-        with open(self.alloc_fn, 'w') as f:
-            json.dump(self.portfolio, f, indent=4)
-
-    def get_value(self, use_initial=False):
-        value = 0
-        for ticker, info in self.portfolio['tickers'].items():
-            value += info['close'] * info['qty']
-        if use_initial and value == 0:
-            return self.initial_value
-        return value
+    def compute_equity(self, portfolio):
+        portfolio['cash'] = int(portfolio['cash'] * 100) / 100
+        equity = portfolio['cash']
+        #print(f"compute_eq: cash {equity}")
+        for ticker, info in portfolio['tickers'].items():
+            close = info['close']  #self.data[ticker].close.iloc[-1]
+            #info['close'] = close
+            value = close * info['qty']
+            equity += value
+            #print(f"compute_eq: {ticker}, {close}, {info['qty']}, {value}")
+        equity = int(equity * 100) / 100
+        #print(f"compute_eq: equity={equity}\n")
+        return equity
 
     def allocate(self):
         raise NotImplementedError
     
-    def close(self, end_of_week):
+    def to_be_closed(self, end_of_week):
         return set()  # tickers for positions to be closed
 
 class RisingAssets(AlphaStrategy):
 
-    def __init__(self, logger, initial_value, today):
-        super().__init__(logger, 'ra', initial_value, today)
+    def __init__(self, logger, portfolio, today):
+        super().__init__(logger, 'ra', portfolio['ra'], today)
 
     def allocate(self):
-        self.log(f"========= allocate {self.initial_value}")
         top = []
-        value = self.get_value(True)
-        for ticker, info in self.portfolio['tickers'].items():
+        for ticker in self.tickers:
             d = self.data[ticker]
+            #self.allocatable += d.close.iloc[-1]
             score = 0
             #print(f"{ticker}: {len(d.close)}")
             for n in [1, 3, 6, 12]:
@@ -173,7 +169,7 @@ class RisingAssets(AlphaStrategy):
             #print(f"{ticker}: {score}, {volatility.iloc[-1]}")
             top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
         
-        self.portfolio['tickers'] = {}
+        new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
         vol_sum = 0
         top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
         for item in top_sorted:
@@ -182,34 +178,33 @@ class RisingAssets(AlphaStrategy):
 
         for item in top_sorted:
             close = self.data[item['ticker']].close.iloc[-1]
-            alloc_cash = value * item['rev_vol'] / vol_sum
+            alloc_cash = self.allocatable * item['rev_vol'] / vol_sum
             alloc = alloc_cash / close
+            calc_alloc = alloc
             if alloc < 1 and alloc > 0.5:
                 alloc = 1
             else:
-                alloc = int(alloc)
-            self.log(f"{item['ticker']}: px {close}, {alloc}")
-            self.portfolio['tickers'][item['ticker']] = {
-                'qty': alloc,
-                'close': close,
-                'buy_limit': close
-            }
-        self.portfolio['value'] = self.get_value()
-        self.log("Portfolio after alloc:")
-        self.log(self.portfolio)
+                alloc = int(alloc * 100) / 100
+            self.log(f"{item['ticker']}: px {close}, {alloc}, val {int(close * alloc * 100) / 100}")  #, calculated {calc_alloc}")
+            if alloc >= 1:
+                new_portfolio['tickers'][item['ticker']] = {
+                    'qty': alloc,
+                    'close': close,
+                    'side': 'buy'
+                }
+        #print('new_cash', new_portfolio['cash'])
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 
 class DynamicTreasures(AlphaStrategy):
 
-    def __init__(self, logger, initial_value, today):
-        super().__init__(logger, 'dt', initial_value, today)
+    def __init__(self, logger, portfolio, today):
+        super().__init__(logger, 'dt', portfolio['dt'], today)
         self.remains = self.tickers[-1]
 
     def allocate(self):
-        self.log(f"========= allocate {self.initial_value}")
         top = []
-        value = self.get_value(True)
-        for ticker, info in self.portfolio['tickers'].items():
+        for ticker in self.tickers:
             if ticker != self.remains:
                 d = self.data[ticker]
                 score = 0
@@ -222,185 +217,204 @@ class DynamicTreasures(AlphaStrategy):
                 #print(f"{ticker}: {score}")
                 top.append({'ticker': ticker, 'score': score})
         
-        self.portfolio['tickers'] = {}
+        new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
+        remains_alloc = self.allocatable
         for item in top:
             alloc = 0
             if item['score'] > 0:
                 close = self.data[item['ticker']].close.iloc[-1]
-                alloc_cash = value * item['score'] / 100
+                alloc_cash = self.allocatable * item['score'] / 100
                 alloc = alloc_cash / close
-                alloc = int(alloc)
-                self.log(f"{item['ticker']}: px {close}, {alloc}")
-                self.portfolio['tickers'][item['ticker']] = {
-                    'qty': alloc,
-                    'close': close,
-                    'buy_limit': close
-                }
+                alloc = int(alloc * 100) / 100
+                if alloc >= 1:
+                    value = int(close * alloc * 100) / 100
+                    remains_alloc -= value
+                    self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
+                    new_portfolio['tickers'][item['ticker']] = {
+                        'qty': alloc,
+                        'close': close,
+                        'side': 'buy'
+                    }
 
         # remains alloc
-        alloc_cash = self.initial_value - self.get_value()
+        print('remains alloc', remains_alloc)
         close = self.data[self.remains].close.iloc[-1]
-        alloc = alloc_cash / close
-        alloc = int(alloc)
-        if alloc > 0:
-            self.portfolio['tickers'][self.remains] = {
+        alloc = remains_alloc / close
+        alloc = int(alloc * 100) / 100
+        if alloc >= 1:
+            new_portfolio['tickers'][self.remains] = {
+                '-remains': True,
                 'qty': alloc,
                 'close': close,
-                'buy_limit': close
+                'side': 'buy'
             }
-            self.log(f"{self.remains}: px {close}, {alloc} - remains")
+            self.log(f"{self.remains}: px {close}, {alloc}, val {int(close * alloc * 100) / 100} - remains")
        
-        self.portfolio['value'] = self.get_value()
-        self.log("Portfolio after alloc:")
-        self.log(self.portfolio)
-
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 class ETFAvalanches(AlphaStrategy):
 
-    def __init__(self, logger, initial_value, today):
-        super().__init__(logger, 'ea', initial_value, today)
+    def __init__(self, logger, portfolio, today):
+        super().__init__(logger, 'ea', portfolio['ea'], today)
         self.remains = self.tickers[-1]
 
     def allocate(self):
-        self.log(f"========= allocate {self.initial_value}")
         top = []
-        value = self.get_value(True)
-        for ticker, info in self.portfolio['tickers'].items():
-            if ticker != self.remains:
+        tickers_to_close = self.to_be_closed(False)
+        for ticker in self.tickers:
+            if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                 d = self.data[ticker]
-                score = 0
-                rev_vol = 0
                 if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                    if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
+                    print(f"{ticker}: negative total return over the past year")
+                    if True or d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
+                        print(f"{ticker}: negative total return over the past month")
+                        #print(f"{ticker}: d.close {d.close}")
                         rsi = AlphaStrategy.compute_rsi(d.close).iloc[-1]
-                        if rsi > 70:
-                            score = d.close.iloc[-1] * 1.03  # put a sell limit order 3.0% above the current price
+                        #print(f"{ticker}: rsi {AlphaStrategy.compute_rsi(d.close)}")
+                        if rsi >= 0:  #> 70:
+                            print(f"{ticker}: rsi {rsi}")
+                            entry = d.close.iloc[-1] * 1.03  # put a sell limit order 3.0% above the current price
+                            entry = int(entry * 100) / 100
                             daily_return = d.close / d.close.shift(1)
                             volatility = daily_return.rolling(window=100).std()
-                            rev_vol = 1 / volatility.iloc[-1]
-                top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
+                            top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
 
-        self.portfolio['tickers'] = {}
-        vol_sum = 0
-        top_sorted = sorted(top, key=lambda x: x['rev_vol'], reverse=False)[:5]
-        for item in top_sorted:
-            #print(f"{item['ticker']}: {item['rev_vol']}, {score}, {value}")
-            vol_sum += item['rev_vol']
+        new_portfolio = copy.deepcopy(self.portfolio)
+        print('to_be_closed', tickers_to_close)
+        print('allocatable', self.allocatable)
+        remains_alloc = self.allocatable
+        # remove closed tickers
+        for ticker in list(new_portfolio['tickers'].keys()):
+            info = new_portfolio['tickers'][ticker]
+            if ticker in tickers_to_close:
+                del new_portfolio['tickers'][ticker]
+            else:
+                value = int(self.data[ticker].close.iloc[-1] * info['qty'] * 100) / 100
+                remains_alloc -= value
+
+
+        print('remains alloc1', remains_alloc)
+        free_slots = 5 + 1 - len(new_portfolio['tickers'])
+        top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=True)[:free_slots]
+        alloc_cash = self.allocatable / 5
 
         for item in top_sorted:
             alloc = 0
-            if item['rev_vol'] > 0:
-                close = self.data[item['ticker']].close.iloc[-1]
-                alloc_cash = value * item['rev_vol'] / vol_sum
-                alloc = alloc_cash / close
-                alloc = int(alloc)
-                self.log(f"{item['ticker']}: px {close}, {alloc}")
-                self.portfolio['tickers'][item['ticker']] = {
+            entry = item['entry']
+            alloc = alloc_cash / entry
+            alloc = int(alloc * 100) / 100
+            if alloc >= 1:
+                value = int(entry * alloc * 100) / 100
+                self.log(f"{item['ticker']}: px {entry}, {alloc}, val {value}")
+                remains_alloc -= value
+                new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
-                    'close': close,
-                    'sell_limit': close
+                    'close': entry,
+                    'side': 'sell'
                 }
         # remains alloc
-        alloc_cash = self.initial_value - self.get_value()
+        print('remains alloc', remains_alloc)
         close = self.data[self.remains].close.iloc[-1]
-        alloc = alloc_cash / close
-        alloc = int(alloc)
-        if alloc > 0:
-            self.portfolio['tickers'][self.remains] = {
+        alloc = remains_alloc / close
+        alloc = int(alloc * 100) / 100
+        if alloc >= 1:
+            close = self.data[self.remains].close.iloc[-1]
+            new_portfolio['tickers'][self.remains] = {
+                '-remains': True,
                 'qty': alloc,
                 'close': close,
-                'buy_limit': close
+                'side': 'buy'
             }
-            self.log(f"{self.remains}: px {close}, {alloc} - remains")
+            self.log(f"{self.remains}: px {close}, {alloc}, val {int(close * alloc * 100) / 100} - remains")
+        else:
+            del new_portfolio['tickers'][self.remains]
 
-        self.portfolio['value'] = self.get_value()
-        self.log("Portfolio after alloc:")
-        self.log(self.portfolio)
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
-    def close(self, end_of_week):
-        self.log(f"========= close {self.initial_value}, eow {end_of_week}")
+    def to_be_closed(self, end_of_week):
         result = set()  # tickers for positions to be closed
         for ticker, info in self.portfolio['tickers'].items():
-            if ticker != self.remains and info['qty'] > 0:
+            if ticker != self.remains:
                 d = self.data[ticker]
                 if d.close.iloc[-1] > d.close.iloc[-21 * 1 - 1]:  # positive total return over the past month
-                    result.insert(ticker)
+                    result.add(ticker)
                 rsi = AlphaStrategy.compute_rsi(d.close).iloc[-1]
                 if rsi < 15:
-                    result.insert(ticker)
+                    result.add(ticker)
         return result
 
 
 class MeanReversion(AlphaStrategy):
 
-    def __init__(self, logger, initial_value, today):
-        super().__init__(logger, 'mr', initial_value, today)
+    def __init__(self, logger, portfolio, today):
+        super().__init__(logger, 'mr', portfolio['mr'], today)
         self.long_trend_ticker = self.tickers[-2]
         self.remains = self.tickers[-1]
 
     def allocate(self):
-        self.log(f"========= allocate {self.initial_value}")
         trend_d = self.data[self.long_trend_ticker].close
         if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
             self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
             top = []
-            value = self.get_value(True)
-            for ticker, info in self.portfolio['tickers'].items():
+            for ticker in self.tickers:
                 if ticker != self.remains and ticker != self.long_trend_ticker:
-                    d = self.data[ticker]
-                    #print(f"{ticker} check")
-                    if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                        if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
-                            weekly_series = d.close.resample('W').last()
-                            #print(weekly_series)
-                            rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
-                            #exit()
-                            if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
-                                #print(f"allocate {ticker}: rsi {rsi}")
-                                daily_return = d.close / d.close.shift(1)
-                                volatility = daily_return.rolling(window=100).std()
-                                top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
+                    try:
+                        d = self.data[ticker]
+                        #print(f"{ticker} check")
+                        if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
+                            if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
+                                weekly_series = d.close.resample('W').last()
+                                #print(weekly_series)
+                                rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
+                                if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
+                                    #print(f"allocate {ticker}: rsi {rsi}")
+                                    daily_return = d.close / d.close.shift(1)
+                                    volatility = daily_return.rolling(window=100).std()
+                                    top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
+                    except KeyError:
+                        pass
 
             top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:10]
-            #print(top_sorted)
-            alloc_cash = value / 10
+            alloc_cash = self.allocatable / 10
 
-            self.portfolio['tickers'] = {}
+            new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
             for item in top_sorted:
                 alloc = 0
                 if item['volatility'] > 0:
                     close = self.data[item['ticker']].close.iloc[-1]
                     alloc = alloc_cash / close
                     alloc = int(alloc)
-                    self.log(f"{item['ticker']}: px {close}, {alloc}")
-                self.portfolio['tickers'][item['ticker']] = {
-                    'qty': alloc,
-                    'close': close,
-                    'buy_limit': close
-                }
+                    self.log(f"{item['ticker']}: px {close}, {alloc}, val {int(close * alloc * 100) / 100}")
+                    if alloc >= 1:
+                        new_portfolio['tickers'][item['ticker']] = {
+                            'qty': alloc,
+                            'entry': close,
+                            'close': close,
+                            'side': 'buy'
+                        }
             # remains alloc
-            alloc_cash = self.initial_value - self.get_value()
+            alloc_cash = self.allocatable - self.compute_equity(new_portfolio)
             close = self.data[self.remains].close.iloc[-1]
             alloc = alloc_cash / close
-            alloc = int(alloc)
-            if alloc > 0:
-                self.portfolio['tickers'][self.remains] = {
+            alloc = int(alloc * 10) / 10
+            if alloc >= 1:
+                new_portfolio['tickers'][self.remains] = {
+                    '-remains': True,
                     'qty': alloc,
+                    'entry': close,
                     'close': close,
-                    'buy_limit': close
+                    'side': 'buy'
                 }
-                self.log(f"{self.remains}: px {close}, {alloc} - remains")
-
-            self.portfolio['value'] = self.get_value()
-            self.log("Portfolio after alloc:")
-            self.log(self.portfolio)
+                self.log(f"{self.remains}: px {close}, {alloc}, val {int(close * alloc * 100) / 100} - remains")
         else:
             self.log(f"{self.long_trend_ticker} trend is negative: {trend_d.iloc[-1]} < {trend_d.iloc[-21 * 6 - 1]}")
 
-    def close(self, end_of_week):
-        self.log(f"close {self.initial_value}, end_of_week {end_of_week}")
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
+
+    def to_be_closed(self, end_of_week):
+        self.log(f"========= to_be_closed: end_of_week {end_of_week}")
         result = set()  # tickers for positions to be closed
-        for ticker, info in self.portfolio['tickers'].items():
+        for ticker, info in self.portfolio.items():
             if ticker != self.remains and info['qty'] > 0:
                 d = self.data[ticker]
                 if end_of_week:
@@ -409,6 +423,6 @@ class MeanReversion(AlphaStrategy):
                     rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
                     if rsi > 80:
                         result.insert(ticker)
-                if d.close.iloc[-1] / info['buy_limit'] < 0.9:  # the current price is more than 10% below the entry price
+                if d.close.iloc[-1] / info['entry'] < 0.9:  # the current price is more than 10% below the entry price
                     result.insert(ticker)
         return result

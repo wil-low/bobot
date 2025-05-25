@@ -1,6 +1,7 @@
 # main.py
 
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 import sys
 import time
 from loguru import logger  # pip install loguru
@@ -11,27 +12,87 @@ def write_tickers(tickers, fn):
         for t in tickers:
             f.write(f"{t}\n")
 
-def alpha_alloc(today, initial_value):
+def compute_equity(p):
+    equity = p['cash']
+    for key in ['ra', 'dt', 'ea', 'mr']:
+        if key in p:
+            for ticker, info in p[key]['tickers'].items():
+                equity += info['close'] * info['qty']
+    p['equity'] = equity
+
+def save_portfolio(p, fn):
+    with open(fn, 'w') as f:
+        json.dump(p, f, indent=4, sort_keys=True)
+
+def alpha_alloc(today, cash):
     #today = datetime.now().strftime('%Y-%m-%d')
 
-    logger.info(f"alpha_alloc: {today}")
+    portfolio = None
 
-    strategy0 = RisingAssets(logger, initial_value * 0.3, today)
-    strategy0.allocate()
-    #strategy0.save_portfolio()
+    try:
+        with open(f'work/portfolio/{today}.json') as f:
+            portfolio = json.load(f)
+            #print(self.portfolio)
+    except FileNotFoundError:
+        logger.debug("Starting with empty portfolio")
+        cash30 = cash * 0.3
+        cash20 = cash * 0.2
+        portfolio = {
+            'date': today,
+            'cash': cash,
+            'equity': cash,
+            'ra': {
+                'tickers': {},
+                'cash': cash30,
+                'equity': cash30
+            },
+            'dt': {
+                'tickers': {},
+                'cash': cash20,
+                'equity': cash20
+            },
+            'ea': {
+                'tickers': {},
+                'cash': cash20,
+                'equity': cash20
+            },
+            'mr': {
+                'tickers': {},
+                'cash': cash30,
+                'equity': cash30
+            }
+        }
+        compute_equity(portfolio)
+        save_portfolio(portfolio, f'work/portfolio/{today}.json')
 
-    strategy1 = DynamicTreasures(logger, initial_value * 0.2, today)
-    strategy1.allocate()
-    #strategy1.save_portfolio()
+    logger.info(f"alpha_alloc: {today}, equity {portfolio['equity']}, cash {portfolio['cash']}")
 
-    strategy2 = ETFAvalanches(logger, initial_value * 0.2, today)
-    strategy2.allocate()
-    #strategy2.save_portfolio()
+    new_portfolio = {"transitions": {}, "cash": 0}
 
-    strategy3 = MeanReversion(logger, initial_value * 0.3, today)
-    strategy3.allocate()
-    #strategy3.save_portfolio()
+    STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
+    STRAT = [ETFAvalanches]
 
+    for strategy_cls in STRAT:
+        s = strategy_cls(logger, portfolio.copy(), today)
+        new_portfolio[s.key], new_portfolio["transitions"][s.key] = s.allocate()
+
+    #logger.info('new_portfolio: ' + json.dumps(new_portfolio, indent=4, sort_keys=True))
+
+    compute_equity(new_portfolio)
+    new_portfolio['cash'] = int((portfolio['equity'] - new_portfolio['equity']) * 100) / 100
+
+    next_date_str = None
+    current = datetime.strptime(today, '%Y-%m-%d')
+    while True:
+        current += timedelta(days=1)
+        if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
+            next_date_str = current.strftime('%Y-%m-%d')
+            print(f"Next working day is {next_date_str}")
+            logger.info(f"Next working day is {next_date_str}")
+            break
+    
+    new_portfolio['date'] = next_date_str
+    save_portfolio(new_portfolio, f'work/portfolio/next_{next_date_str}.json')
 
 if __name__ == '__main__':
     logger.remove()
