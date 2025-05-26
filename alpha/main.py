@@ -64,7 +64,7 @@ def alpha_alloc(params, cash):
 
     portfolio = None
 
-    if len(params) == 4 and params[3] == 'sync':
+    if config['sync']:
         # get portfolio from broker
         broker = RStockTrader(config['auth'])
         sync = {
@@ -181,7 +181,7 @@ if __name__ == '__main__':
 
     logger.debug("\n")
     if len(sys.argv) < 3:
-        logger.error("Usage: alpha/main.py <config> <YYYY-MM-DD> [sync]")
+        logger.error("Usage: alpha/main.py <config> <YYYY-MM-DD>")
         exit(1)
 
     alpha_alloc(sys.argv, 10000)

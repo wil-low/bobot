@@ -5,6 +5,7 @@
         "bot_token": "<BOT_TOKEN>",
         "channel_id": "<CHANNEL_ID>"
     },
+    "sync": false,
     "subdir": "test",
     "broker": "test"
 }

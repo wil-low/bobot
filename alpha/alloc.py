@@ -14,6 +14,7 @@ class AlphaStrategy:
         self.logger = logger
         self.portfolio = portfolio
 
+        self.log(f"========= init strategy =========")
         self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
 
         self.data = {}
@@ -55,10 +56,10 @@ class AlphaStrategy:
                     value = self.floor2(entry * qty)
                     self.portfolio['cash'] += value
                     del self.portfolio['tickers'][ticker]
-                    self.log(f"{ticker}: expired Day Limit order")
+                    self.log(f"{ticker}: day order expired")
         self.portfolio['cash'] = self.floor2(self.portfolio['cash'])
         # update prices by previous day close
-        self.log(f"========= update prices =========")
+        self.log(f"update prices:")
         equity = self.portfolio['cash']
         for ticker, info in self.portfolio['tickers'].items():
             close = self.data[ticker].close.iloc[-1]
