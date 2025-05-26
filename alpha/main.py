@@ -27,13 +27,12 @@ def save_portfolio(p, fn):
         json.dump(p, f, indent=4, sort_keys=True)
 
 def alpha_alloc(params, cash):
-    today = params[1]
-
     config = {}
-    with open(params[2]) as f:
+    with open(params[1]) as f:
         config = json.load(f)
         print(config)
 
+    today = params[2]
     #today = datetime.now().strftime('%Y-%m-%d')
 
     portfolio = None
@@ -124,15 +123,16 @@ def alpha_alloc(params, cash):
                     'equity': cash30
                 }
             }
-            compute_equity(portfolio)
+            #compute_equity(portfolio)
             save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
 
-    logger.info(f"alpha_alloc: {today}, equity {portfolio['equity']}, cash {portfolio['cash']}")
+    #logger.info(f"alpha_alloc: {today}, equity {portfolio['equity']}, cash {portfolio['cash']}")
+    logger.info(f"alpha_alloc: {today}")
 
     new_portfolio = {"transitions": {}, "cash": 0}
 
     STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
-    #STRAT = [ETFAvalanches]
+    STRAT = [ETFAvalanches]
 
     for strategy_cls in STRAT:
         s = strategy_cls(logger, portfolio.copy(), today)
@@ -154,7 +154,8 @@ def alpha_alloc(params, cash):
             break
     
     new_portfolio['date'] = next_date_str
-    save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/next_{next_date_str}.json')
+    #save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/next_{next_date_str}.json')
+    save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/{next_date_str}.json')
 
 if __name__ == '__main__':
     logger.remove()
@@ -165,8 +166,9 @@ if __name__ == '__main__':
     logger.add('log/alpha_%04d%02d%02d.log' % (tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
 
+    logger.debug("\n")
     if len(sys.argv) < 3:
-        logger.error("Usage: alpha/main.py <YYYY-MM-DD> <config> [sync]")
+        logger.error("Usage: alpha/main.py <config> <YYYY-MM-DD> [sync]")
         exit(1)
         
     alpha_alloc(sys.argv, 10000)
