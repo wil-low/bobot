@@ -23,7 +23,7 @@ class AlphaStrategy:
                 query = f"""
                 SELECT *
                 FROM (
-                    SELECT date, close
+                    SELECT date, close, low, high
                     FROM prices
                     JOIN tickers ON prices.ticker_id = tickers.id
                     WHERE tickers.symbol = ? AND date < ?
@@ -43,6 +43,20 @@ class AlphaStrategy:
                 pass
         conn.close()
 
+        # expire Day Limit orders
+        for ticker in list(self.portfolio['tickers'].keys()):
+            info = self.portfolio['tickers'][ticker]
+            if info['type'] == 'limit':
+                entry = info['close']
+                qty = info['qty']
+                low = self.data[ticker].low.iloc[-1]
+                high = self.data[ticker].high.iloc[-1]
+                if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
+                    value = self.floor2(entry * qty)
+                    self.portfolio['cash'] += value
+                    del self.portfolio['tickers'][ticker]
+                    self.log(f"{ticker}: expired Day Limit order")
+        self.portfolio['cash'] = self.floor2(self.portfolio['cash'])
         # update prices by previous day close
         self.log(f"Update portfolio prices, equity={self.portfolio['equity']}, cash={self.portfolio['cash']}")
         equity = self.portfolio['cash']

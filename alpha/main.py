@@ -26,13 +26,35 @@ def save_portfolio(p, fn):
     with open(fn, 'w') as f:
         json.dump(p, f, indent=4, sort_keys=True)
 
+def next_working_day(today):
+    next_date_str = None
+    current = datetime.strptime(today, '%Y-%m-%d')
+    while True:
+        current += timedelta(days=1)
+        if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
+            next_date_str = current.strftime('%Y-%m-%d')
+            print(f"Next working day is {next_date_str}")
+            logger.info(f"Next working day is {next_date_str}")
+            break
+    return next_date_str
+
 def alpha_alloc(params, cash):
     config = {}
     with open(params[1]) as f:
         config = json.load(f)
-        print(config)
+        #print(config)
 
     today = params[2]
+
+    logger.info(f"Alpha System start: {today}")
+
+    d = datetime.strptime(today, '%Y-%m-%d')
+    if d.weekday() >= 5:
+        print(f"{today} is a weekend, exiting")
+        logger.error(f"{today} is a weekend, exiting")
+        next_working_day(today)
+        exit(1)
+
     #today = datetime.now().strftime('%Y-%m-%d')
 
     portfolio = None
@@ -126,9 +148,6 @@ def alpha_alloc(params, cash):
             #compute_equity(portfolio)
             save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
 
-    #logger.info(f"alpha_alloc: {today}, equity {portfolio['equity']}, cash {portfolio['cash']}")
-    logger.info(f"alpha_alloc: {today}")
-
     new_portfolio = {"transitions": {}, "cash": 0}
 
     STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
@@ -143,16 +162,7 @@ def alpha_alloc(params, cash):
     compute_equity(new_portfolio)
     new_portfolio['cash'] = int((portfolio['equity'] - new_portfolio['equity']) * 100) / 100
 
-    next_date_str = None
-    current = datetime.strptime(today, '%Y-%m-%d')
-    while True:
-        current += timedelta(days=1)
-        if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
-            next_date_str = current.strftime('%Y-%m-%d')
-            print(f"Next working day is {next_date_str}")
-            logger.info(f"Next working day is {next_date_str}")
-            break
-    
+    next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
     #save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/next_{next_date_str}.json')
     save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/{next_date_str}.json')
@@ -170,5 +180,5 @@ if __name__ == '__main__':
     if len(sys.argv) < 3:
         logger.error("Usage: alpha/main.py <config> <YYYY-MM-DD> [sync]")
         exit(1)
-        
+
     alpha_alloc(sys.argv, 10000)
