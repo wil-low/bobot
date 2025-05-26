@@ -58,7 +58,7 @@ class AlphaStrategy:
                     self.log(f"{ticker}: expired Day Limit order")
         self.portfolio['cash'] = self.floor2(self.portfolio['cash'])
         # update prices by previous day close
-        self.log(f"Update portfolio prices, equity={self.portfolio['equity']}, cash={self.portfolio['cash']}")
+        self.log(f"========= update prices =========")
         equity = self.portfolio['cash']
         for ticker, info in self.portfolio['tickers'].items():
             close = self.data[ticker].close.iloc[-1]
@@ -68,8 +68,8 @@ class AlphaStrategy:
             self.log(f"   {ticker}, {close}, {info['qty']}, {value}")
         equity = self.floor2(equity)
         self.compute_cash(self.portfolio, equity)
-        self.allocatable = self.floor2(portfolio['equity'] * 0.97)  # reserve for fees
-        self.log(f"========= equity {self.portfolio['equity']}, allocatable {self.allocatable}")
+        self.allocatable = self.floor2(portfolio['equity'] * 0.98)  # reserve for fees
+        self.log(f"equity={self.portfolio['equity']}, cash={self.portfolio['cash']}, allocatable={self.allocatable}")
 
     @staticmethod
     def load_tickers(fn):
@@ -283,7 +283,6 @@ class DynamicTreasures(AlphaStrategy):
                         }
 
             # remains alloc
-            print('remains alloc', remains_alloc)
             close = self.data[self.remains].close.iloc[-1]
             alloc = int(remains_alloc / close)
             if alloc >= 1:
@@ -320,7 +319,7 @@ class ETFAvalanches(AlphaStrategy):
                         rsi = AlphaStrategy.compute_rsi(d.close).iloc[-1]
                         #print(f"{ticker}: rsi {AlphaStrategy.compute_rsi(d.close)}")
                         if rsi > 70:
-                            print(f"{ticker}: rsi {rsi}")
+                            #print(f"{ticker}: rsi {rsi}")
                             entry = self.floor2(d.close.iloc[-1] * 1.03)  # put a sell limit order 3.0% above the current price
                             daily_return = d.close / d.close.shift(1)
                             volatility = daily_return.rolling(window=100).std()
@@ -497,6 +496,6 @@ class MeanReversion(AlphaStrategy):
                     #self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
                         result.add(ticker)
-                if info['close'] / info['entry'] < 0.9:  # the current price is more than 10% below the entry price
+                if info['close'] / info['entry'] < 0.95:  # the current price is more than 10% below the entry price
                     result.add(ticker)
         return result

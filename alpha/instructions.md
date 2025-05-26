@@ -14,11 +14,11 @@ Verify that portfolio file for today exists in work/portfolio. Start main.py wit
 
     python main.py 2025-05-25
 
-The application creates new portfolio file next_YYYY-MM-DD.json with transitions. Review it.
+The application creates new portfolio file YYYY-MM-DD.json with transitions. Review it.
 
 # Five minutes after US Market open
 
-Execute transitions and copy 'next' file to a new portfolio file removing 'next_'.
+Execute transitions.
 
 # Execute transitions
 

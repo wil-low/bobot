@@ -14,13 +14,18 @@ def write_tickers(tickers, fn):
         for t in tickers:
             f.write(f"{t}\n")
 
-def compute_equity(p):
-    equity = p['cash']
+def floor2(val):
+    return int(val * 100) / 100
+
+def compute_totals(p):
+    equity = 0
+    cash = 0
     for key in ['ra', 'dt', 'ea', 'mr']:
         if key in p:
-            for ticker, info in p[key]['tickers'].items():
-                equity += info['close'] * info['qty']
-    p['equity'] = equity
+            equity += p[key]['equity']
+            cash += p[key]['cash']
+    p['equity'] = floor2(equity)
+    p['cash'] = floor2(cash)
 
 def save_portfolio(p, fn):
     with open(fn, 'w') as f:
@@ -145,26 +150,24 @@ def alpha_alloc(params, cash):
                     'equity': cash30
                 }
             }
-            #compute_equity(portfolio)
+            compute_totals(portfolio)
             save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
 
     new_portfolio = {"transitions": {}, "cash": 0}
 
     STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
-    STRAT = [MeanReversion]
-
+ 
     for strategy_cls in STRAT:
         s = strategy_cls(logger, portfolio.copy(), today)
         new_portfolio[s.key], new_portfolio["transitions"][s.key] = s.allocate()
 
     #logger.info('new_portfolio: ' + json.dumps(new_portfolio, indent=4, sort_keys=True))
 
-    compute_equity(new_portfolio)
-    new_portfolio['cash'] = int((portfolio['equity'] - new_portfolio['equity']) * 100) / 100
+    compute_totals(new_portfolio)
+    logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
-    #save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/next_{next_date_str}.json')
     save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/{next_date_str}.json')
 
 if __name__ == '__main__':
