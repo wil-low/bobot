@@ -1,0 +1,10 @@
+{
+    "auth": {
+        "account_id": "<APP_ID>",
+        "api_key": "<APP_KEY>",
+        "bot_token": "<BOT_TOKEN>",
+        "channel_id": "<CHANNEL_ID>"
+    },
+    "subdir": "test",
+    "broker": "test"
+}

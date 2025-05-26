@@ -5,7 +5,9 @@ import json
 import sys
 import time
 from loguru import logger  # pip install loguru
-from alloc import DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
+
+from broker import RStockTrader
+from alloc import AlphaStrategy, DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
 
 def write_tickers(tickers, fn):
     with open(fn, "w") as f:
@@ -24,53 +26,113 @@ def save_portfolio(p, fn):
     with open(fn, 'w') as f:
         json.dump(p, f, indent=4, sort_keys=True)
 
-def alpha_alloc(today, cash):
+def alpha_alloc(params, cash):
+    today = params[1]
+
+    config = {}
+    with open(params[2]) as f:
+        config = json.load(f)
+        print(config)
+
     #today = datetime.now().strftime('%Y-%m-%d')
 
     portfolio = None
 
-    try:
-        with open(f'work/portfolio/{today}.json') as f:
-            portfolio = json.load(f)
-            #print(self.portfolio)
-    except FileNotFoundError:
-        logger.debug("Starting with empty portfolio")
-        cash30 = cash * 0.3
-        cash20 = cash * 0.2
-        portfolio = {
-            'date': today,
-            'cash': cash,
-            'equity': cash,
+    if len(params) == 4 and params[3] == 'sync':
+        # get portfolio from broker
+        broker = RStockTrader(config['auth'])
+        sync = {
+            "cash": broker.getcash(),
+            "equity": broker.getvalue(),
+            "unsure": {},
             'ra': {
                 'tickers': {},
-                'cash': cash30,
-                'equity': cash30
+                'cash': 0,
+                'equity': 0
             },
             'dt': {
                 'tickers': {},
-                'cash': cash20,
-                'equity': cash20
+                'cash': 0,
+                'equity': 0
             },
             'ea': {
                 'tickers': {},
-                'cash': cash20,
-                'equity': cash20
+                'cash': 0,
+                'equity': 0
             },
             'mr': {
                 'tickers': {},
-                'cash': cash30,
-                'equity': cash30
+                'cash': 0,
+                'equity': 0
             }
         }
-        compute_equity(portfolio)
-        save_portfolio(portfolio, f'work/portfolio/{today}.json')
+        keys = {}  # ticker: [key]
+        for key in ['ra', 'dt', 'ea', 'mr']:
+            for t in AlphaStrategy.load_tickers(f"cfg/{key}.txt"):
+                try:
+                    keys[t].append(key)
+                except KeyError:
+                    keys[t] = [key]
+        for ticker, p in broker.positions.items():
+            pos = ticker.find('.')
+            if pos >= 0:
+                ticker = ticker[0:pos]
+            k = keys[ticker]
+            if len(k) == 1:
+                sync[k[0]]['tickers'][ticker] = p
+            elif len(k) == 0:
+                raise NotImplementedError
+            else:
+                p['keys'] = k
+                sync['unsure'][ticker] = p
+
+        with open(f"work/portfolio/{config['subdir']}/sync_{today}.json", 'w') as f:
+            json.dump(sync, f, indent=4, sort_keys=True)
+        return
+
+    else:
+        try:
+            with open(f"work/portfolio/{config['subdir']}/{today}.json") as f:
+                portfolio = json.load(f)
+                #print(self.portfolio)
+        except FileNotFoundError:
+            logger.debug("Starting with empty portfolio")
+            cash30 = cash * 0.3
+            cash20 = cash * 0.2
+            portfolio = {
+                'date': today,
+                'cash': cash,
+                'equity': cash,
+                'ra': {
+                    'tickers': {},
+                    'cash': cash30,
+                    'equity': cash30
+                },
+                'dt': {
+                    'tickers': {},
+                    'cash': cash20,
+                    'equity': cash20
+                },
+                'ea': {
+                    'tickers': {},
+                    'cash': cash20,
+                    'equity': cash20
+                },
+                'mr': {
+                    'tickers': {},
+                    'cash': cash30,
+                    'equity': cash30
+                }
+            }
+            compute_equity(portfolio)
+            save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
 
     logger.info(f"alpha_alloc: {today}, equity {portfolio['equity']}, cash {portfolio['cash']}")
 
     new_portfolio = {"transitions": {}, "cash": 0}
 
     STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
-    STRAT = [ETFAvalanches]
+    #STRAT = [ETFAvalanches]
 
     for strategy_cls in STRAT:
         s = strategy_cls(logger, portfolio.copy(), today)
@@ -92,7 +154,7 @@ def alpha_alloc(today, cash):
             break
     
     new_portfolio['date'] = next_date_str
-    save_portfolio(new_portfolio, f'work/portfolio/next_{next_date_str}.json')
+    save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/next_{next_date_str}.json')
 
 if __name__ == '__main__':
     logger.remove()
@@ -103,8 +165,8 @@ if __name__ == '__main__':
     logger.add('log/alpha_%04d%02d%02d.log' % (tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
 
-    if len(sys.argv) < 2:
-        logger.error("Usage: alpha/main.py <YYYY-MM-DD>")
+    if len(sys.argv) < 3:
+        logger.error("Usage: alpha/main.py <YYYY-MM-DD> <config> [sync]")
         exit(1)
         
-    alpha_alloc(sys.argv[1], 10000)
+    alpha_alloc(sys.argv, 10000)

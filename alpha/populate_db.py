@@ -14,7 +14,8 @@ cursor = conn.cursor()
 cursor.executescript("""
 CREATE TABLE IF NOT EXISTS tickers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT UNIQUE NOT NULL
+    symbol TEXT UNIQUE NOT NULL,
+    roboforex_sfx TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS prices (
