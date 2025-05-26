@@ -175,50 +175,65 @@ class RisingAssets(AlphaStrategy):
 
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'ra', portfolio['ra'], today)
+        self.reinvest = False
+        if len(self.portfolio['tickers']) == 0:
+            self.reinvest = True
+        else:
+            # first_working_day of month
+            today_date = datetime.strptime(today, '%Y-%m-%d')
+            day = 1
+            while True:
+                d = datetime(today_date.year, today_date.month, day)
+                if d.weekday() < 5:  # 0=Monday, ..., 4=Friday
+                    self.reinvest = day == today_date.day
+                    break
+                day += 1
 
     def allocate(self):
-        top = []
-        for ticker in self.tickers:
-            d = self.data[ticker]
-            #self.allocatable += d.close.iloc[-1]
-            score = 0
-            #print(f"{ticker}: {len(d.close)}")
-            for n in [1, 3, 6, 12]:
-                sc = d.close.iloc[-1] / d.close.iloc[-21 * n - 1] * 100
-                #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
-                score += sc
-            score /= 4
-            daily_return = d.close / d.close.shift(1)
-            volatility = daily_return.rolling(window=63).std()
-            rev_vol = 1 / volatility.iloc[-1]
-            #print(f"{ticker}: {score}, {volatility.iloc[-1]}")
-            top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
-        
-        new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
-        vol_sum = 0
-        top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
-        for item in top_sorted:
-            #print(f"{item['ticker']}: {item['rev_vol']}, {value}")
-            vol_sum += item['rev_vol']
+        if self.reinvest:
+            top = []
+            for ticker in self.tickers:
+                d = self.data[ticker]
+                #self.allocatable += d.close.iloc[-1]
+                score = 0
+                #print(f"{ticker}: {len(d.close)}")
+                for n in [1, 3, 6, 12]:
+                    sc = d.close.iloc[-1] / d.close.iloc[-21 * n - 1] * 100
+                    #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
+                    score += sc
+                score /= 4
+                daily_return = d.close / d.close.shift(1)
+                volatility = daily_return.rolling(window=63).std()
+                rev_vol = 1 / volatility.iloc[-1]
+                #print(f"{ticker}: {score}, {volatility.iloc[-1]}")
+                top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
+            
+            new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
+            vol_sum = 0
+            top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
+            for item in top_sorted:
+                #print(f"{item['ticker']}: {item['rev_vol']}, {value}")
+                vol_sum += item['rev_vol']
 
-        for item in top_sorted:
-            close = self.data[item['ticker']].close.iloc[-1]
-            alloc_cash = self.allocatable * item['rev_vol'] / vol_sum
-            alloc = alloc_cash / close
-            calc_alloc = alloc
-            if alloc < 1 and alloc > 0.5:
-                alloc = 1
-            else:
-                alloc = int(alloc)
-            value = self.floor2(close * alloc)
-            self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")  #, calculated {calc_alloc}")
-            if alloc >= 1:
-                new_portfolio['tickers'][item['ticker']] = {
-                    'qty': alloc,
-                    'close': close,
-                    'type': 'market'
-                }
-        #print('new_cash', new_portfolio['cash'])
+            for item in top_sorted:
+                close = self.data[item['ticker']].close.iloc[-1]
+                alloc_cash = self.allocatable * item['rev_vol'] / vol_sum
+                alloc = alloc_cash / close
+                calc_alloc = alloc
+                if alloc < 1 and alloc > 0.5:
+                    alloc = 1
+                else:
+                    alloc = int(alloc)
+                value = self.floor2(close * alloc)
+                self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")  #, calculated {calc_alloc}")
+                if alloc >= 1:
+                    new_portfolio['tickers'][item['ticker']] = {
+                        'qty': alloc,
+                        'close': close,
+                        'type': 'market'
+                    }
+        else:
+            new_portfolio = copy.deepcopy(self.portfolio)
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 
