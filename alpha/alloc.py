@@ -35,8 +35,8 @@ class AlphaStrategy:
                 df = pd.read_sql_query(query, conn, params=(t, today), parse_dates=['date'])
                 df.set_index('date', inplace=True)
 
-                if len(df) < 21 * 12:
-                    self.log(f"{t} not enough rows in DB ({len(df)})")
+                if len(df) < 21 * 12 + 1:
+                    #self.log(f"{t} not enough rows in DB ({len(df)})")
                     continue
                 self.data[t] = df
             except FileNotFoundError:
@@ -168,7 +168,7 @@ class AlphaStrategy:
     def allocate(self):
         raise NotImplementedError
     
-    def to_be_closed(self, end_of_week):
+    def to_be_closed(self):
         return set()  # tickers for positions to be closed
 
 class RisingAssets(AlphaStrategy):
@@ -278,6 +278,7 @@ class DynamicTreasures(AlphaStrategy):
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 class ETFAvalanches(AlphaStrategy):
+    SLOT_COUNT = 5
 
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'ea', portfolio['ea'], today)
@@ -285,7 +286,7 @@ class ETFAvalanches(AlphaStrategy):
 
     def allocate(self):
         top = []
-        tickers_to_close = self.to_be_closed(False)
+        tickers_to_close = self.to_be_closed()
         for ticker in self.tickers:
             if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                 d = self.data[ticker]
@@ -303,7 +304,7 @@ class ETFAvalanches(AlphaStrategy):
                             volatility = daily_return.rolling(window=100).std()
                             top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
 
-        alloc_slot = self.allocatable / 5
+        alloc_slot = self.allocatable / self.SLOT_COUNT
         self.log(f"alloc_slot = {alloc_slot}")
 
         new_portfolio = copy.deepcopy(self.portfolio)
@@ -320,7 +321,7 @@ class ETFAvalanches(AlphaStrategy):
                 if ticker != self.remains:
                     occupied_slots += 1
 
-        free_slots = 5 - occupied_slots
+        free_slots = self.SLOT_COUNT - occupied_slots
         top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=True)[:free_slots]
         free_slots -= len(top_sorted)
 
@@ -358,7 +359,7 @@ class ETFAvalanches(AlphaStrategy):
 
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
-    def to_be_closed(self, end_of_week):
+    def to_be_closed(self):
         result = set()  # tickers for positions to be closed
         for ticker, info in self.portfolio['tickers'].items():
             if ticker != self.remains:
@@ -372,106 +373,108 @@ class ETFAvalanches(AlphaStrategy):
 
 
 class MeanReversion(AlphaStrategy):
+    SLOT_COUNT = 10
 
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'mr', portfolio['mr'], today)
         self.long_trend_ticker = self.tickers[-2]
         self.remains = self.tickers[-1]
+        self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
 
     def allocate(self):
         trend_d = self.data[self.long_trend_ticker].close
-        tickers_to_close = self.to_be_closed(False)
+        tickers_to_close = self.to_be_closed()
         new_portfolio = copy.deepcopy(self.portfolio)
-        if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
-            self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
-            top = []
-            for ticker in self.tickers:
-                if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
-                    try:
-                        d = self.data[ticker]
-                        #print(f"{ticker} check")
-                        if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                            if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
-                                weekly_series = d.close.resample('W').last()
-                                #print(weekly_series)
-                                rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
-                                if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
-                                    #print(f"allocate {ticker}: rsi {rsi}")
-                                    daily_return = d.close / d.close.shift(1)
-                                    volatility = daily_return.rolling(window=100).std()
-                                    top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
-                    except KeyError:
-                        pass
+        top = []
+        if self.weekday == 0:  # These rules are checked at the end of the business week
+            if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
+                self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
+                for ticker in self.tickers:
+                    if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
+                        try:
+                            d = self.data[ticker]
+                            #print(f"{ticker} check")
+                            if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
+                                if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
+                                    weekly_series = d.close.resample('W').last()
+                                    #print(weekly_series)
+                                    rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
+                                    if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
+                                        #print(f"allocate {ticker}: rsi {rsi}")
+                                        daily_return = d.close / d.close.shift(1)
+                                        volatility = daily_return.rolling(window=100).std()
+                                        top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
+                        except KeyError:
+                            pass
+            else:
+                self.log(f"{self.long_trend_ticker} trend is negative: {trend_d.iloc[-1]} < {trend_d.iloc[-21 * 6 - 1]}")
 
-            alloc_slot = self.allocatable / 10
-            self.log(f"alloc_slot = {alloc_slot}")
+        alloc_slot = self.allocatable / self.SLOT_COUNT
+        self.log(f"alloc_slot = {alloc_slot}")
 
-            new_portfolio = copy.deepcopy(self.portfolio)
-            if len(tickers_to_close) > 0:
-                self.log(f"Close positions: {tickers_to_close}")
+        new_portfolio = copy.deepcopy(self.portfolio)
+        if len(tickers_to_close) > 0:
+            self.log(f"Close positions: {tickers_to_close}")
 
-            occupied_slots = 0
-            # remove closed tickers
-            for ticker in list(new_portfolio['tickers'].keys()):
-                info = new_portfolio['tickers'][ticker]
-                if ticker in tickers_to_close:
-                    del new_portfolio['tickers'][ticker]
-                else:
-                    if ticker != self.remains:
-                        occupied_slots += 1
+        occupied_slots = 0
+        # remove closed tickers
+        for ticker in list(new_portfolio['tickers'].keys()):
+            info = new_portfolio['tickers'][ticker]
+            if ticker in tickers_to_close:
+                del new_portfolio['tickers'][ticker]
+            else:
+                if ticker != self.remains:
+                    occupied_slots += 1
 
-            free_slots = 10 - occupied_slots
-            top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:free_slots]
-            free_slots -= len(top_sorted)
+        free_slots = self.SLOT_COUNT - occupied_slots
+        top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:free_slots]
+        free_slots -= len(top_sorted)
 
-            for item in top_sorted:
-                close = self.data[item['ticker']].close.iloc[-1]
-                alloc = int(alloc_slot / close)
-                value = self.floor2(close * alloc)
-                self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
-                if alloc >= 1:
-                    new_portfolio['tickers'][item['ticker']] = {
-                        'qty': alloc,
-                        'entry': close,
-                        'close': close,
-                        'type': 'market'
-                    }
-                else:
-                    free_slots += 1
-            # remains alloc
-            close = self.data[self.remains].close.iloc[-1]
-            alloc = int(alloc_slot * free_slots / close)
+        for item in top_sorted:
+            close = self.data[item['ticker']].close.iloc[-1]
+            alloc = int(alloc_slot / close)
+            value = self.floor2(close * alloc)
+            self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
             if alloc >= 1:
-                close = self.data[self.remains].close.iloc[-1]
-                value = self.floor2(close * alloc)
-                new_portfolio['tickers'][self.remains] = {
-                    '-remains': True,
+                new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
+                    'entry': close,
                     'close': close,
                     'type': 'market'
                 }
-                self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
-            elif self.remains in new_portfolio['tickers']:
-                self.log(f"Close position: {self.remains}")
-                del new_portfolio['tickers'][self.remains]
-
-        else:
-            self.log(f"{self.long_trend_ticker} trend is negative: {trend_d.iloc[-1]} < {trend_d.iloc[-21 * 6 - 1]}")
+            else:
+                free_slots += 1
+        # remains alloc
+        close = self.data[self.remains].close.iloc[-1]
+        alloc = int(alloc_slot * free_slots / close)
+        if alloc >= 1:
+            close = self.data[self.remains].close.iloc[-1]
+            value = self.floor2(close * alloc)
+            new_portfolio['tickers'][self.remains] = {
+                '-remains': True,
+                'qty': alloc,
+                'close': close,
+                'type': 'market'
+            }
+            self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
+        elif self.remains in new_portfolio['tickers']:
+            self.log(f"Close position: {self.remains}")
+            del new_portfolio['tickers'][self.remains]
 
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
-    def to_be_closed(self, end_of_week):
-        self.log(f"========= to_be_closed: end_of_week {end_of_week}")
+    def to_be_closed(self):
         result = set()  # tickers for positions to be closed
         for ticker, info in self.portfolio['tickers'].items():
             if ticker != self.remains and info['qty'] > 0:
                 d = self.data[ticker]
-                if end_of_week:
+                if self.weekday == 0:  # Monday (end of week in fact)
                     weekly_series = d.close.resample('W').last()
                     #print(weekly_series)
                     rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
+                    #self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
-                        result.insert(ticker)
-                if d.close.iloc[-1] / info['entry'] < 0.9:  # the current price is more than 10% below the entry price
-                    result.insert(ticker)
+                        result.add(ticker)
+                if info['close'] / info['entry'] < 0.9:  # the current price is more than 10% below the entry price
+                    result.add(ticker)
         return result

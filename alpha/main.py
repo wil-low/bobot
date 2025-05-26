@@ -46,9 +46,9 @@ def alpha_alloc(params, cash):
 
     today = params[2]
 
-    logger.info(f"Alpha System start: {today}")
-
     d = datetime.strptime(today, '%Y-%m-%d')
+    logger.info(f"Alpha System start: {today}, weekday={d.weekday()}")
+
     if d.weekday() >= 5:
         print(f"{today} is a weekend, exiting")
         logger.error(f"{today} is a weekend, exiting")
@@ -151,7 +151,7 @@ def alpha_alloc(params, cash):
     new_portfolio = {"transitions": {}, "cash": 0}
 
     STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
-    STRAT = [ETFAvalanches]
+    STRAT = [MeanReversion]
 
     for strategy_cls in STRAT:
         s = strategy_cls(logger, portfolio.copy(), today)
