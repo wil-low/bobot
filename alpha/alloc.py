@@ -242,54 +242,61 @@ class DynamicTreasures(AlphaStrategy):
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'dt', portfolio['dt'], today)
         self.remains = self.tickers[-1]
+        self.reinvest = False
+        if len(self.portfolio['tickers']) == 0:
+            self.reinvest = True
+        else:
+            self.reinvest = datetime.strptime(today, '%Y-%m-%d').weekday() == 0
 
     def allocate(self):
-        top = []
-        for ticker in self.tickers:
-            if ticker != self.remains:
-                d = self.data[ticker]
-                score = 0
-                #print(f"{ticker}: {len(d.close)}")
-                for n in [1, 2, 3, 4, 5]:
-                    sc = d.close.iloc[-1] > d.close.iloc[-21 * n - 1]
-                    #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
-                    if sc:
-                        score += 5  # % allocation
-                #print(f"{ticker}: {score}")
-                top.append({'ticker': ticker, 'score': score})
-        
-        new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
-        remains_alloc = self.allocatable
-        for item in top:
-            alloc = 0
-            if item['score'] > 0:
-                close = self.data[item['ticker']].close.iloc[-1]
-                alloc_cash = self.allocatable * item['score'] / 100
-                alloc = int(alloc_cash / close)
-                if alloc >= 1:
-                    value = self.floor2(close * alloc)
-                    remains_alloc -= value
-                    self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
-                    new_portfolio['tickers'][item['ticker']] = {
-                        'qty': alloc,
-                        'close': close,
-                        'type': 'market'
-                    }
+        if self.reinvest:
+            top = []
+            for ticker in self.tickers:
+                if ticker != self.remains:
+                    d = self.data[ticker]
+                    score = 0
+                    #print(f"{ticker}: {len(d.close)}")
+                    for n in [1, 2, 3, 4, 5]:
+                        sc = d.close.iloc[-1] > d.close.iloc[-21 * n - 1]
+                        #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
+                        if sc:
+                            score += 5  # % allocation
+                    #print(f"{ticker}: {score}")
+                    top.append({'ticker': ticker, 'score': score})
+            
+            new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
+            remains_alloc = self.allocatable
+            for item in top:
+                alloc = 0
+                if item['score'] > 0:
+                    close = self.data[item['ticker']].close.iloc[-1]
+                    alloc_cash = self.allocatable * item['score'] / 100
+                    alloc = int(alloc_cash / close)
+                    if alloc >= 1:
+                        value = self.floor2(close * alloc)
+                        remains_alloc -= value
+                        self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
+                        new_portfolio['tickers'][item['ticker']] = {
+                            'qty': alloc,
+                            'close': close,
+                            'type': 'market'
+                        }
 
-        # remains alloc
-        print('remains alloc', remains_alloc)
-        close = self.data[self.remains].close.iloc[-1]
-        alloc = int(remains_alloc / close)
-        if alloc >= 1:
-            new_portfolio['tickers'][self.remains] = {
-                '-remains': True,
-                'qty': alloc,
-                'close': close,
-                'type': 'market'
-            }
-            value = self.floor2(close * alloc)
-            self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
-       
+            # remains alloc
+            print('remains alloc', remains_alloc)
+            close = self.data[self.remains].close.iloc[-1]
+            alloc = int(remains_alloc / close)
+            if alloc >= 1:
+                new_portfolio['tickers'][self.remains] = {
+                    '-remains': True,
+                    'qty': alloc,
+                    'close': close,
+                    'type': 'market'
+                }
+                value = self.floor2(close * alloc)
+                self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
+        else:
+            new_portfolio = copy.deepcopy(self.portfolio)
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 class ETFAvalanches(AlphaStrategy):
