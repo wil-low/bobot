@@ -281,7 +281,6 @@ class ETFAvalanches(AlphaStrategy):
 
         new_portfolio = copy.deepcopy(self.portfolio)
         print('to_be_closed', tickers_to_close)
-        print('allocatable', self.allocatable)
         remains_alloc = self.allocatable
         # remove closed tickers
         for ticker in list(new_portfolio['tickers'].keys()):
@@ -292,11 +291,12 @@ class ETFAvalanches(AlphaStrategy):
                 value = int(self.data[ticker].close.iloc[-1] * info['qty'] * 100) / 100
                 remains_alloc -= value
 
-
-        print('remains alloc1', remains_alloc)
         free_slots = 5 + 1 - len(new_portfolio['tickers'])
         top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=True)[:free_slots]
         alloc_cash = self.allocatable / 5
+        self.log(f"allocatable = {self.allocatable}")
+        self.log(f"alloc_part = {alloc_cash}")
+        self.log(f"remains alloc1 = {remains_alloc}")
 
         for item in top_sorted:
             alloc = 0
@@ -313,7 +313,7 @@ class ETFAvalanches(AlphaStrategy):
                     'side': 'sell'
                 }
         # remains alloc
-        print('remains alloc', remains_alloc)
+        self.log(f"remains alloc2 = {remains_alloc}")
         close = self.data[self.remains].close.iloc[-1]
         alloc = remains_alloc / close
         alloc = int(alloc * 100) / 100
@@ -326,7 +326,7 @@ class ETFAvalanches(AlphaStrategy):
                 'side': 'buy'
             }
             self.log(f"{self.remains}: px {close}, {alloc}, val {int(close * alloc * 100) / 100} - remains")
-        else:
+        elif self.remains in new_portfolio['tickers']:
             del new_portfolio['tickers'][self.remains]
 
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
@@ -353,11 +353,13 @@ class MeanReversion(AlphaStrategy):
 
     def allocate(self):
         trend_d = self.data[self.long_trend_ticker].close
+        tickers_to_close = self.to_be_closed(False)
+        new_portfolio = copy.deepcopy(self.portfolio)
         if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
             self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
             top = []
             for ticker in self.tickers:
-                if ticker != self.remains and ticker != self.long_trend_ticker:
+                if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                     try:
                         d = self.data[ticker]
                         #print(f"{ticker} check")
@@ -374,7 +376,21 @@ class MeanReversion(AlphaStrategy):
                     except KeyError:
                         pass
 
-            top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:10]
+            print('to_be_closed', tickers_to_close)
+            print('allocatable', self.allocatable)
+            remains_alloc = self.allocatable
+            # remove closed tickers
+            for ticker in list(new_portfolio['tickers'].keys()):
+                info = new_portfolio['tickers'][ticker]
+                if ticker in tickers_to_close:
+                    del new_portfolio['tickers'][ticker]
+                else:
+                    value = int(self.data[ticker].close.iloc[-1] * info['qty'] * 100) / 100
+                    remains_alloc -= value
+
+            print('remains alloc1', remains_alloc)
+            free_slots = 5 + 1 - len(new_portfolio['tickers'])
+            top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:free_slots]
             alloc_cash = self.allocatable / 10
 
             new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
@@ -406,6 +422,8 @@ class MeanReversion(AlphaStrategy):
                     'side': 'buy'
                 }
                 self.log(f"{self.remains}: px {close}, {alloc}, val {int(close * alloc * 100) / 100} - remains")
+            elif self.remains in new_portfolio['tickers']:
+                del new_portfolio['tickers'][self.remains]
         else:
             self.log(f"{self.long_trend_ticker} trend is negative: {trend_d.iloc[-1]} < {trend_d.iloc[-21 * 6 - 1]}")
 
@@ -414,7 +432,7 @@ class MeanReversion(AlphaStrategy):
     def to_be_closed(self, end_of_week):
         self.log(f"========= to_be_closed: end_of_week {end_of_week}")
         result = set()  # tickers for positions to be closed
-        for ticker, info in self.portfolio.items():
+        for ticker, info in self.portfolio['tickers'].items():
             if ticker != self.remains and info['qty'] > 0:
                 d = self.data[ticker]
                 if end_of_week:
