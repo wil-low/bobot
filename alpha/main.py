@@ -43,14 +43,7 @@ def next_working_day(today):
             break
     return next_date_str
 
-def alpha_alloc(params, cash):
-    config = {}
-    with open(params[1]) as f:
-        config = json.load(f)
-        #print(config)
-
-    today = params[2]
-
+def alpha_alloc(config, today):
     d = datetime.strptime(today, '%Y-%m-%d')
     logger.info(f"Alpha System start: {today}, weekday={d.weekday()}")
 
@@ -60,11 +53,10 @@ def alpha_alloc(params, cash):
         next_working_day(today)
         exit(1)
 
-    #today = datetime.now().strftime('%Y-%m-%d')
-
     portfolio = None
 
     if config['sync']:
+        logger.info(f"Getting portfolio from broker {config['broker']}")
         # get portfolio from broker
         broker = RStockTrader(config['auth'])
         sync = {
@@ -103,7 +95,12 @@ def alpha_alloc(params, cash):
             pos = ticker.find('.')
             if pos >= 0:
                 ticker = ticker[0:pos]
-            k = keys[ticker]
+            k = keys[ticker].copy()
+            if p['side'] == 'sell':
+                sync['ea']['tickers'][ticker] = p
+            else:
+                if 'ea' in k:
+                    k.remove('ea')
             if len(k) == 1:
                 sync[k[0]]['tickers'][ticker] = p
             elif len(k) == 0:
@@ -112,8 +109,11 @@ def alpha_alloc(params, cash):
                 p['keys'] = k
                 sync['unsure'][ticker] = p
 
-        with open(f"work/portfolio/{config['subdir']}/sync_{today}.json", 'w') as f:
+        fn = f"work/portfolio/{config['subdir']}/sync_{today}.json"
+        with open(fn, 'w') as f:
             json.dump(sync, f, indent=4, sort_keys=True)
+
+        logger.info(f"Portfolio written to {fn}")
         return
 
     else:
@@ -123,6 +123,7 @@ def alpha_alloc(params, cash):
                 #print(self.portfolio)
         except FileNotFoundError:
             logger.debug("Starting with empty portfolio")
+            cash = config['initial_cash']
             cash30 = cash * 0.3
             cash20 = cash * 0.2
             portfolio = {
@@ -171,17 +172,26 @@ def alpha_alloc(params, cash):
     save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/{next_date_str}.json')
 
 if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print("Usage: alpha/main.py <config> <YYYY-MM-DD>")
+        exit(1)
+
+    config = {}
+    with open(sys.argv[1]) as f:
+        config = json.load(f)
+        #print(config)
+
+    today = sys.argv[2]
+
     logger.remove()
     #logger.add(sys.stderr,
     #    format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>')
     #    #filter = lambda record: record['extra'] is {})
     tm = time.localtime()
-    logger.add('log/alpha_%04d%02d%02d.log' % (tm.tm_year, tm.tm_mon, tm.tm_mday),
+    logger.add('log/%s/alpha_%04d%02d%02d.log' % (config['subdir'], tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
 
-    logger.debug("\n")
-    if len(sys.argv) < 3:
-        logger.error("Usage: alpha/main.py <config> <YYYY-MM-DD>")
-        exit(1)
+    logger.debug("")
+    logger.debug("")
 
-    alpha_alloc(sys.argv, 10000)
+    alpha_alloc(config, today)
