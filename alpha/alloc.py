@@ -14,7 +14,7 @@ class AlphaStrategy:
         self.logger = logger
         self.portfolio = portfolio
 
-        self.log(f"========= init strategy =========")
+        self.log(f"========= init =========")
         self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
 
         self.data = {}
@@ -118,8 +118,8 @@ class AlphaStrategy:
             diff = round(new_qty - old_qty, 2)
             if diff > 0:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
-                #if self.key == 'mr' and old_qty == 0:
-                #    text += ', record entry price'
+                if self.key == 'mr' and old_qty == 0:
+                    text += ', record entry price'
                 #elif self.key == 'ea' and old_qty == 0:
                 #    text += f", using sell Day order at {new_tickers[ticker]['close']}"
                 adds.append({

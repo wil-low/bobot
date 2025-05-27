@@ -5,6 +5,7 @@
         "bot_token": "<BOT_TOKEN>",
         "channel_id": "<CHANNEL_ID>"
     },
+    "initial_cash": 10000,
     "sync": false,
     "subdir": "test",
     "broker": "test"

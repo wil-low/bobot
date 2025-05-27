@@ -34,7 +34,7 @@ class RStockTrader:
             response = requests.get(url, headers = self.HEADERS)
             response.raise_for_status()
             data = response.json()
-            print(data)
+            #print(data)
             if data['code'] == 'ok':
                 if len(data['data']) == 0:
                     break
@@ -45,6 +45,7 @@ class RStockTrader:
                             'qty': abs(item['volume']),
                             'entry': item['open_price'],
                             'close': item['close_price'],
+                            'type': 'limit' if item['side'] == 'sell' else 'market'
                         }
                         self.positions[item['ticker']] = pos
                 skip += 100
@@ -54,8 +55,8 @@ class RStockTrader:
         response = requests.get(f"{RStockTrader.URL}/api/v1/accounts/{self.params['account_id']}", headers = self.HEADERS)
         response.raise_for_status()
         data = response.json()
-        print(data)
+        #print(data)
         if data['code'] == 'ok':
             self.cash = data['data']['margin']['free_margin']
             self.equity = data['data']['margin']['equity']
-        print(self.positions)
+        #print(self.positions)
