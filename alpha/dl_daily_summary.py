@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import sys
 import time
 import requests
 from datetime import datetime, timedelta, timezone
@@ -16,9 +17,9 @@ def dl_daily_summary(conn, ids, token, start_date):
 
     js_data = json.loads(response.content)
 
+    count = 0
     if js_data['resultsCount'] > 0:
         cursor = conn.cursor()
-        count = 0
         # Insert price data
         for row in js_data['results']:
             id = ids.get(row['T'], None)
@@ -36,11 +37,12 @@ def dl_daily_summary(conn, ids, token, start_date):
                 ))
                 count += 1
         conn.commit()
-        print(f"Added {count} rows for {start_date}")
+        print(f"Added/replaced {count} rows for {start_date}")
     else:
         print(f"No rows for {start_date}")
 
     time.sleep(13)  # 5 API Calls / Minute
+    return count
 
 if __name__ == '__main__':
     DB_FILE = "alpha/work/stock.sqlite"
@@ -59,22 +61,32 @@ if __name__ == '__main__':
     ids = {symbol: ticker_id for ticker_id, symbol in cursor.fetchall()}
     print(f"{len(ids)} tickers loaded")
 
-    start_date = datetime.now()
-    end_date = start_date
-    
-    #start_date = datetime.strptime('2023-12-20', '%Y-%m-%d')
-    #end_date = datetime.strptime('2023-01-01', '%Y-%m-%d')
+    if len(sys.argv) > 2:
+        start_date = datetime.strptime(sys.argv[1], '%Y-%m-%d')
+        end_date = datetime.strptime(sys.argv[2], '%Y-%m-%d')
 
-    current = start_date
-    while current >= end_date:
-        date_str = current.strftime('%Y-%m-%d')
-        if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
-            print(date_str)
-            dl_daily_summary(conn, ids, token, date_str)
-        else:
-            print(f"Skip weekend {date_str}")
-        current -= timedelta(days=1)
-        #break
+        current = start_date
+        while current >= end_date:
+            date_str = current.strftime('%Y-%m-%d')
+            if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
+                print(f"Download for {date_str}")
+                dl_daily_summary(conn, ids, token, date_str)
+            else:
+                print(f"Skip weekend {date_str}")
+            current -= timedelta(days=1)
+            #break
+    else:
+        # download last working day before today
+        current = datetime.now()
+        while True:
+            current -= timedelta(days=1)
+            date_str = current.strftime('%Y-%m-%d')
+            if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
+                print(f"Download for {date_str}")
+                if dl_daily_summary(conn, ids, token, date_str) > 0:
+                    break
+            else:
+                print(f"Skip weekend {date_str}")
 
     print("All data imported successfully.")
     conn.close()
