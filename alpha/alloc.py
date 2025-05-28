@@ -142,8 +142,6 @@ class AlphaStrategy:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
                 if self.key == 'mr' and old_qty == 0:
                     text += ', record entry price'
-                #elif self.key == 'ea' and old_qty == 0:
-                #    text += f", using sell Day order at {new_tickers[ticker]['close']}"
                 adds.append({
                     'ticker': ticker,
                     'action': 'buy',
@@ -154,6 +152,8 @@ class AlphaStrategy:
             elif diff < 0:
                 diff = abs(diff)
                 text = f'Sell {diff} of {ticker}, change from {old_qty} to {new_qty}'
+                if self.key == 'ea' and old_qty == 0:
+                    text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
                 removes.append({
                     'ticker': ticker,
                     'action': 'sell',
