@@ -22,20 +22,32 @@ def dl_daily_summary(conn, ids, token, start_date):
         cursor = conn.cursor()
         # Insert price data
         for row in js_data['results']:
-            id = ids.get(row['T'], None)
-            if id:
-                date = datetime.fromtimestamp(row["t"] / 1000, timezone.utc).strftime('%Y-%m-%d')
-                cursor.execute("""
-                    INSERT OR REPLACE INTO prices (
-                        ticker_id, date, close, high, low, open, volume,
-                        adjClose, adjHigh, adjLow, adjOpen, adjVolume, divCash, splitFactor
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    id, date, row["c"], row["h"], row["l"],
-                    row["o"], row["v"], row["c"], row["h"],
-                    row["l"], row["o"], row["v"], 0, 1
-                ))
-                count += 1
+            ticker = row['T']
+            id = ids.get(ticker, None)
+            if id is None:
+                continue
+                # Insert ticker into database
+                cursor.execute("INSERT OR IGNORE INTO tickers (symbol) VALUES (?)", (ticker,))
+                conn.commit()
+
+                # Get ticker_id
+                cursor.execute("SELECT id FROM tickers WHERE symbol = ?", (ticker,))
+                id = cursor.fetchone()[0]
+                ids[ticker] = id
+                print(f"New ticker {id}: {ticker}")
+
+            date = datetime.fromtimestamp(row["t"] / 1000, timezone.utc).strftime('%Y-%m-%d')
+            cursor.execute("""
+                INSERT OR REPLACE INTO prices (
+                    ticker_id, date, close, high, low, open, volume,
+                    adjClose, adjHigh, adjLow, adjOpen, adjVolume, divCash, splitFactor
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                id, date, row["c"], row["h"], row["l"],
+                row["o"], row["v"], row["c"], row["h"],
+                row["l"], row["o"], row["v"], 0, 1
+            ))
+            count += 1
         conn.commit()
         print(f"Added/replaced {count} rows for {start_date}")
     else:
