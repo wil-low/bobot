@@ -122,8 +122,8 @@ def alpha_alloc(config, today):
                 portfolio = json.load(f)
                 #print(self.portfolio)
         except FileNotFoundError:
-            logger.debug("Starting with empty portfolio")
             cash = config['initial_cash']
+            logger.debug(f"Starting with empty portfolio: {cash}")
             cash30 = cash * 0.3
             cash20 = cash * 0.2
             portfolio = {

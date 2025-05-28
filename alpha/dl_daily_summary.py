@@ -7,10 +7,10 @@ import requests
 from datetime import datetime, timedelta, timezone
 
 def dl_daily_summary(conn, ids, token, start_date):
-    url = f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false&apiKey={token}"
+    url = f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false"
     print(f"Downloading daily summary from {url}")
 
-    response = requests.get(url)
+    response = requests.get(f"{url}&apiKey={token}")
     if response.status_code != 200:
         print(f"Error downloading {start_date}: {response.text}")
         exit(1)
@@ -56,6 +56,35 @@ def dl_daily_summary(conn, ids, token, start_date):
     time.sleep(13)  # 5 API Calls / Minute
     return count
 
+def load_ticker_info():
+    url = f"https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&order=asc&limit=1000&sort=ticker"
+    while True:
+        print(f"Downloading ticker info from {url}")
+
+        response = requests.get(f"{url}&apiKey={token}")
+        if response.status_code != 200:
+            print(f"Error downloading: {response.text}")
+            exit(1)
+
+        js_data = json.loads(response.content)
+
+        count = 0
+        if js_data['count'] > 0:
+            cursor = conn.cursor()
+            # Insert price data
+            for row in js_data['results']:
+                ticker = row['ticker']
+                id = ids.get(ticker, None)
+                if id:
+                    cursor.execute("UPDATE tickers SET name = ?, type = ? WHERE symbol = ?", (row['name'], row['type'], ticker))
+        conn.commit()
+        if 'next_url' in js_data:
+            url = js_data['next_url']
+            time.sleep(13)  # 5 API Calls / Minute
+        else:
+            break
+
+
 if __name__ == '__main__':
     DB_FILE = "alpha/work/stock.sqlite"
 
@@ -72,6 +101,9 @@ if __name__ == '__main__':
     cursor.execute("SELECT id, symbol FROM tickers")
     ids = {symbol: ticker_id for ticker_id, symbol in cursor.fetchall()}
     print(f"{len(ids)} tickers loaded")
+
+    #load_ticker_info()
+    #exit()
 
     if len(sys.argv) > 2:
         start_date = datetime.strptime(sys.argv[1], '%Y-%m-%d')

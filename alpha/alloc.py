@@ -15,10 +15,32 @@ class AlphaStrategy:
         self.portfolio = portfolio
 
         self.log(f"========= init =========")
-        self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
+        conn = sqlite3.connect("work/stock.sqlite")
+
+        self.tickers = []
+        if self.key == 'mr':
+            # load from DB instead of file
+            query = f"""
+            SELECT ticker_id, t.symbol
+                FROM (
+                    SELECT ticker_id, AVG(close * volume) AS avg_dollar_volume
+                    FROM prices
+                    WHERE date >= DATE(?, '-200 days')
+                    GROUP BY ticker_id
+                    ORDER BY avg_dollar_volume DESC
+                )  
+                JOIN tickers t ON ticker_id = t.id
+                WHERE t.type='CS' AND t.disabled = 0
+                LIMIT 500
+            """
+            cursor = conn.cursor()
+            cursor.execute(query, (today,))
+            rows = cursor.fetchall()
+            self.tickers = [row[1] for row in rows] + ['SPY', 'SHY']  # long trend and remains
+        else:
+            self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
 
         self.data = {}
-        conn = sqlite3.connect("work/stock.sqlite")
         for t in self.tickers:
             try:
                 query = f"""
@@ -37,7 +59,7 @@ class AlphaStrategy:
                 df.set_index('date', inplace=True)
 
                 if len(df) < 21 * 12 + 1:
-                    #self.log(f"{t} not enough rows in DB ({len(df)})")
+                    self.log(f"{t} not enough rows in DB ({len(df)})")
                     continue
                 self.data[t] = df
             except FileNotFoundError:
@@ -75,7 +97,7 @@ class AlphaStrategy:
     @staticmethod
     def load_tickers(fn):
         with open(fn, "r") as f:
-            return [line.strip() for line in f if line.strip()]
+            return [line.strip() for line in f if line.strip() and line[0] != '#']
         return None
 
     @staticmethod
@@ -172,8 +194,9 @@ class AlphaStrategy:
     def to_be_closed(self):
         return set()  # tickers for positions to be closed
 
-class RisingAssets(AlphaStrategy):
 
+class RisingAssets(AlphaStrategy):
+    # Rebalances monthly
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'ra', portfolio['ra'], today)
         self.reinvest = False
@@ -239,7 +262,7 @@ class RisingAssets(AlphaStrategy):
 
 
 class DynamicTreasures(AlphaStrategy):
-
+    # Rebalances weekly
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'dt', portfolio['dt'], today)
         self.remains = self.tickers[-1]
@@ -299,7 +322,9 @@ class DynamicTreasures(AlphaStrategy):
             new_portfolio = copy.deepcopy(self.portfolio)
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
+
 class ETFAvalanches(AlphaStrategy):
+    # Rebalances daily
     SLOT_COUNT = 5
 
     def __init__(self, logger, portfolio, today):
@@ -395,6 +420,7 @@ class ETFAvalanches(AlphaStrategy):
 
 
 class MeanReversion(AlphaStrategy):
+    # Rebalances weekly, checks stops daily
     SLOT_COUNT = 10
 
     def __init__(self, logger, portfolio, today):
@@ -402,13 +428,18 @@ class MeanReversion(AlphaStrategy):
         self.long_trend_ticker = self.tickers[-2]
         self.remains = self.tickers[-1]
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
+        self.reinvest = False
+        if len(self.portfolio['tickers']) == 0:
+            self.reinvest = True
+        else:
+            self.reinvest = self.weekday == 0
 
     def allocate(self):
         trend_d = self.data[self.long_trend_ticker].close
         tickers_to_close = self.to_be_closed()
         new_portfolio = copy.deepcopy(self.portfolio)
         top = []
-        if self.weekday == 0:  # These rules are checked at the end of the business week
+        if self.reinvest:  # These rules are checked at the end of the business week
             if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
                 self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
                 for ticker in self.tickers:
