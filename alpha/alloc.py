@@ -27,17 +27,23 @@ class AlphaStrategy:
                 FROM (
                     SELECT ticker_id, AVG(close * volume) AS avg_dollar_volume
                     FROM prices
-                    WHERE date >= DATE(?, '-200 days')
+                    WHERE date >= DATE(?, 'start of month', '-200 days')
                     GROUP BY ticker_id
                     ORDER BY avg_dollar_volume DESC
                 )  
                 JOIN tickers t ON ticker_id = t.id
                 WHERE t.type in ('CS', 'ADRC') AND t.disabled = 0
+                LIMIT 500
             """
             cursor = conn.cursor()
             cursor.execute(query, (today,))
             rows = cursor.fetchall()
-            self.tickers = [row[1] for row in rows] + ['SPY', 'SHY']  # long trend and remains
+            self.tickers = [row[1] for row in rows]
+            # add existing positions that could be pushed out of top 500
+            for t in self.portfolio['tickers']:
+                if t not in self.tickers:
+                    self.tickers.append(t)
+            self.tickers += ['SPY', 'SHY']  # long trend and remains
         else:
             self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
 
