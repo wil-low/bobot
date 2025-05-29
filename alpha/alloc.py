@@ -32,8 +32,7 @@ class AlphaStrategy:
                     ORDER BY avg_dollar_volume DESC
                 )  
                 JOIN tickers t ON ticker_id = t.id
-                WHERE t.type='CS' AND t.disabled = 0
-                LIMIT 500
+                WHERE t.type in ('CS', 'ADRC') AND t.disabled = 0
             """
             cursor = conn.cursor()
             cursor.execute(query, (today,))
