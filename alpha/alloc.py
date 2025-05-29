@@ -123,8 +123,8 @@ class AlphaStrategy:
         gain_series = pd.Series(gain, index=series.index)
         loss_series = pd.Series(loss, index=series.index)
 
-        avg_gain = gain_series.rolling(window=period, min_periods=period).mean()
-        avg_loss = loss_series.rolling(window=period, min_periods=period).mean()
+        avg_gain = gain_series.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+        avg_loss = loss_series.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
 
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
@@ -354,10 +354,10 @@ class ETFAvalanches(AlphaStrategy):
                     #print(f"{ticker}: negative total return over the past year")
                     if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
                         #print(f"{ticker}: negative total return over the past month")
-                        #print(f"{ticker}: d.close {d.close}")
-                        rsi = AlphaStrategy.compute_rsi(d.close).iloc[-1]
-                        #print(f"{ticker}: rsi {AlphaStrategy.compute_rsi(d.close)}")
-                        if rsi > 70:
+                        #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
+                        rsi = AlphaStrategy.compute_rsi(d.close).iloc[-10:]
+                        #print(f"{ticker}: rsi {rsi}")
+                        if rsi.iloc[-1] > 70:
                             #print(f"{ticker}: rsi {rsi}")
                             entry = self.floor2(d.close.iloc[-1] * 1.03)  # put a sell limit order 3.0% above the current price
                             daily_return = d.close / d.close.shift(1)
