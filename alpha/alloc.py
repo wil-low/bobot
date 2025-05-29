@@ -9,13 +9,15 @@ import numpy as np
 import pandas as pd
 
 class AlphaStrategy:
+    DB_FILE = "work/stock.sqlite"
+
     def __init__(self, logger, key, portfolio, today):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio
 
         self.log(f"========= init =========")
-        conn = sqlite3.connect("work/stock.sqlite")
+        conn = sqlite3.connect(AlphaStrategy.DB_FILE)
 
         self.tickers = []
         if self.key == 'mr':
@@ -99,6 +101,17 @@ class AlphaStrategy:
         with open(fn, "r") as f:
             return [line.strip() for line in f if line.strip() and line[0] != '#']
         return None
+
+    @staticmethod
+    def load_all_tickers_from_db():
+        conn = sqlite3.connect(AlphaStrategy.DB_FILE)
+        query = f"""
+        SELECT id, symbol FROM tickers ORDER BY symbol
+        """
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        return [row[1] for row in rows]
 
     @staticmethod
     def compute_rsi(series, period=2):

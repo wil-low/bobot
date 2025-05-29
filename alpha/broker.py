@@ -40,6 +40,10 @@ class RStockTrader:
                     break
                 for item in data['data']:
                     if item['status'] == 'open':
+                        ticker = item['ticker']
+                        pos = ticker.find('.')
+                        if pos >= 0:
+                            ticker = ticker[0:pos]
                         pos = {
                             'side': item['side'],
                             'qty': abs(item['volume']),
@@ -47,7 +51,7 @@ class RStockTrader:
                             'close': item['close_price'],
                             'type': 'limit' if item['side'] == 'sell' else 'market'
                         }
-                        self.positions[item['ticker']] = pos
+                        self.positions[ticker] = pos
                 skip += 100
             else:
                 break
