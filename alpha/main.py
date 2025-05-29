@@ -10,6 +10,8 @@ from loguru import logger  # pip install loguru
 from broker import RStockTrader
 from alloc import AlphaStrategy, DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
 
+KEYS = ['ra', 'dt', 'ea', 'mr']
+
 def write_tickers(tickers, fn):
     with open(fn, "w") as f:
         for t in tickers:
@@ -21,7 +23,7 @@ def floor2(val):
 def compute_totals(p):
     equity = 0
     cash = 0
-    for key in ['ra', 'dt', 'ea', 'mr']:
+    for key in KEYS:
         if key in p:
             equity += p[key]['equity']
             cash += p[key]['cash']
@@ -92,7 +94,7 @@ def alpha_alloc(config, today, sync):
         }
 
         # scan all keys and update tickers
-        for key in ['ra', 'dt', 'ea', 'mr']:
+        for key in KEYS:
             sync[key]['cash'] = portfolio[key]['cash']
             sync[key]['equity'] = portfolio[key]['equity']
             for ticker, info in portfolio[key]['tickers'].items():
@@ -172,6 +174,8 @@ def alpha_alloc(config, today, sync):
 
     compute_totals(new_portfolio)
     logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
+    for key in KEYS:
+        logger.info(f"    {key}: {floor2(new_portfolio[key]['equity'] / new_portfolio['equity'] * 100)}%")
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
