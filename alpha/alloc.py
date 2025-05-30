@@ -11,7 +11,7 @@ import pandas as pd
 class AllocStrategy:
     DB_FILE = "work/stock.sqlite"
 
-    def __init__(self, logger, key, portfolio, today):
+    def __init__(self, logger, key, portfolio, today, limit=252):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio
@@ -28,19 +28,19 @@ class AllocStrategy:
                 query = f"""
                 SELECT *
                 FROM (
-                    SELECT date, close, low, high
+                    SELECT date, close, low, high, open
                     FROM prices
                     JOIN tickers ON prices.ticker_id = tickers.id
                     WHERE tickers.symbol = ? AND date < ?
                     ORDER BY date DESC
-                    LIMIT 272
+                    LIMIT ?
                 )
                 ORDER BY date ASC;
                 """
-                df = pd.read_sql_query(query, conn, params=(t, today), parse_dates=['date'])
+                df = pd.read_sql_query(query, conn, params=(t, today, limit), parse_dates=['date'])
                 df.set_index('date', inplace=True)
 
-                if len(df) < 21 * 12 + 1:
+                if len(df) < limit:
                     self.log(f"{t} not enough rows in DB ({len(df)})")
                     continue
                 self.data[t] = df
@@ -52,10 +52,14 @@ class AllocStrategy:
         for ticker in list(self.portfolio['tickers'].keys()):
             info = self.portfolio['tickers'][ticker]
             if info['type'] == 'limit':
+                #self.log(self.data[ticker].close.iloc[-10:])
                 entry = info['close']
                 qty = info['qty']
+                #open = self.data[ticker].open.iloc[-1]
                 low = self.data[ticker].low.iloc[-1]
                 high = self.data[ticker].high.iloc[-1]
+                #close = self.data[ticker].close.iloc[-1]
+                #self.log(f"{ticker}: check expire: entry {entry}, open {open}, low {low}, high {high}, close {close}")
                 if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
                     value = self.floor2(entry * qty)
                     self.portfolio['cash'] += value
@@ -83,7 +87,7 @@ class AllocStrategy:
         return None
 
     @staticmethod
-    def compute_rsi(series, period=2):
+    def compute_rsi(series: pd.Series, period=2) -> pd.Series:
         delta = series.diff()
 
         gain = np.where(delta > 0, delta, 0)
@@ -99,6 +103,42 @@ class AllocStrategy:
         rsi = 100 - (100 / (1 + rs))
 
         return rsi
+
+    @staticmethod
+    def compute_crsi(close: pd.Series, rsi_period=3, updown_len=2, roc_len=100) -> pd.Series:
+        # Compute UpDown streaks: +n for consecutive ups, -n for downs, 0 for unchanged
+        def compute_updown_streak(series: pd.Series) -> pd.Series:
+            streak = [0] * len(series)
+            for i in range(1, len(series)):
+                if series.iloc[i] > series.iloc[i - 1]:
+                    streak[i] = streak[i - 1] + 1 if streak[i - 1] > 0 else 1
+                elif series.iloc[i] < series.iloc[i - 1]:
+                    streak[i] = streak[i - 1] - 1 if streak[i - 1] < 0 else -1
+                else:
+                    streak[i] = 0
+            return pd.Series(streak, index=series.index)
+
+        # PercentRank over `window` periods
+        def percent_rank(series, window):
+            return series.rolling(window).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1] if len(x.dropna()) == window else np.nan,
+                raw=False
+            )
+
+        # Calculate RSI of close prices
+        rsi = AllocStrategy.compute_rsi(close, rsi_period)
+
+        # Calculate UpDown RSI (on streaks)
+        updown_streak = compute_updown_streak(close)
+        updown_rsi = AllocStrategy.compute_rsi(updown_streak, updown_len)
+
+        # Calculate PercentRank of 1-day ROC
+        roc = close.pct_change(periods=1) * 100
+        roc_prank = percent_rank(roc, roc_len) * 100
+
+        # Final Connors RSI
+        crsi = (rsi + updown_rsi + roc_prank) / 3.0
+        return crsi
 
     def floor2(self, val):
         return int(val * 100) / 100
@@ -125,6 +165,8 @@ class AllocStrategy:
             diff = round(new_qty - old_qty, 2)
             if diff > 0:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
+                if new_tickers[ticker]['type'] == 'limit':
+                    text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
                 if self.key == 'mr' and old_qty == 0:
                     text += ', record entry price'
                 adds.append({
@@ -137,7 +179,7 @@ class AllocStrategy:
             elif diff < 0:
                 diff = abs(diff)
                 text = f'Sell {diff} of {ticker}, change from {old_qty} to {new_qty}'
-                if self.key == 'ea' and old_qty == 0:
+                if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
                 removes.append({
                     'ticker': ticker,
@@ -506,7 +548,7 @@ class MeanReversion(AllocStrategy):
     def to_be_closed(self):
         result = set()  # tickers for positions to be closed
         for ticker, info in self.portfolio['tickers'].items():
-            if ticker != self.remains and info['qty'] > 0:
+            if ticker != self.remains:
                 d = self.data[ticker]
                 if self.weekday == 0:  # Monday (end of week in fact)
                     weekly_series = d.close.resample('W').last()
@@ -542,7 +584,136 @@ class MeanReversion(AllocStrategy):
         tickers = [row[1] for row in rows]
         # add existing positions that could be pushed out of top 500
         for t in self.portfolio['tickers']:
-            if t not in tickers:
+            if t not in tickers and t != self.remains:
                 tickers.append(t)
         tickers += ['SPY', 'SHY']  # long trend and remains
+        return tickers
+
+
+class CRSISP500(AllocStrategy):
+    # Rebalances daily
+    SLOT_COUNT = 5
+
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today, 110)
+        self.params = {
+            'crsi_setup': 10,  # The stock closes with ConnorsRSI(3, 2, 100) value less than W, where W is 5 or 10
+            'percents_setup': 50,  # The stock closing price is in the bottom X % of the day's range, where X = 25, 50, 75 or 100
+            'percents_entry': 8,  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
+            'crsi_exit': 50  # Exit when the stock closes with ConnorsRSI(3, 2, 100) value greater than Z, where W is 50 or 70
+        }
+        self.remains = self.tickers[-1]
+
+    def allocate(self):
+        tickers_to_close = self.to_be_closed()
+        new_portfolio = copy.deepcopy(self.portfolio)
+        top = []
+        for ticker in self.tickers:
+            if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
+                try:
+                    d = self.data[ticker]
+                    #print(f"{ticker} check")
+                    day_range = d.high.iloc[-1] - d.low.iloc[-1]
+                    bottom_percent = d.low.iloc[-1] + day_range * self.params['percents_setup'] / 100
+                    crsi10 = self.compute_crsi(d.close).iloc[-110:]
+                    crsi = crsi10.iloc[-1]
+                    if crsi < self.params['crsi_setup'] and d.close.iloc[-1] < bottom_percent:
+                        #self.log(ticker)
+                        #self.log(d.close.iloc[-110:])
+                        #self.log(crsi10)
+                        #exit()
+                        px = self.floor2(d.close.iloc[-1] * (100 - self.params['percents_entry']) / 100)
+                        top.append({'ticker': ticker, 'crsi': crsi, 'entry': px})
+                except KeyError:
+                    pass
+
+        alloc_slot = self.allocatable / self.SLOT_COUNT
+        self.log(f"alloc_slot = {alloc_slot}")
+
+        new_portfolio = copy.deepcopy(self.portfolio)
+        if len(tickers_to_close) > 0:
+            self.log(f"Close positions: {tickers_to_close}")
+
+        occupied_slots = 0
+        # remove closed tickers
+        for ticker in list(new_portfolio['tickers'].keys()):
+            info = new_portfolio['tickers'][ticker]
+            if ticker in tickers_to_close:
+                del new_portfolio['tickers'][ticker]
+            else:
+                if ticker != self.remains:
+                    occupied_slots += 1
+
+        free_slots = self.SLOT_COUNT - occupied_slots
+        top_sorted = sorted(top, key=lambda x: x['crsi'], reverse=False)[:free_slots]
+        free_slots -= len(top_sorted)
+
+        for item in top_sorted:
+            alloc = 0
+            entry = item['entry']
+            alloc = round(alloc_slot / entry, 2)
+            if alloc >= 1:
+                value = self.floor2(entry * alloc)
+                self.log(f"{item['ticker']}: px {entry}, {alloc}, val {value}, crsi {item['crsi']}")
+                new_portfolio['tickers'][item['ticker']] = {
+                    'qty': alloc,
+                    'close': entry,
+                    'type': 'limit'
+                }
+
+                #ticker = item['ticker']
+                #open = self.data[ticker].open.iloc[-1]
+                #low = self.data[ticker].low.iloc[-1]
+                #high = self.data[ticker].high.iloc[-1]
+                #close = self.data[ticker].close.iloc[-1]
+                #self.log(self.data[ticker].close.iloc[-10:])
+                #self.log(f"{ticker}: send order: entry {entry}, yesterday: open {open}, low {low}, high {high}, close {close}")
+            else:
+                free_slots += 1
+
+        # remains alloc
+        close = self.data[self.remains].close.iloc[-1]
+        alloc = int(alloc_slot * free_slots / close)
+        if alloc >= 1:
+            close = self.data[self.remains].close.iloc[-1]
+            value = self.floor2(close * alloc)
+            new_portfolio['tickers'][self.remains] = {
+                '-remains': True,
+                'qty': alloc,
+                'close': close,
+                'type': 'market'
+            }
+            self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
+        elif self.remains in new_portfolio['tickers']:
+            self.log(f"Close position: {self.remains}")
+            del new_portfolio['tickers'][self.remains]
+
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
+
+    def to_be_closed(self):
+        result = set()  # tickers for positions to be closed
+        for ticker, info in self.portfolio['tickers'].items():
+            if ticker != self.remains:
+                d = self.data[ticker]
+                crsi = AllocStrategy.compute_crsi(d.close).iloc[-1]
+                self.log(f"{ticker}: crsi={crsi}")
+                if crsi > self.params['crsi_exit']:
+                    result.add(ticker)
+        return result
+
+    def get_tickers(self):
+        # load from DB instead of file
+        conn = sqlite3.connect(AllocStrategy.DB_FILE)
+
+        query = f"""
+        SELECT t.symbol FROM tickers t
+        INNER JOIN sp500 sp ON t.symbol = sp.symbol
+        WHERE t.disabled = 0
+        ORDER BY t.symbol
+        """
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        tickers = [row[0] for row in rows]
+        tickers.append('SHY')  # remains
         return tickers

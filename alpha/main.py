@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime, timedelta
 import json
+import os
 import sys
 import time
 import importlib
@@ -54,13 +55,15 @@ def alpha_alloc(config, today, sync):
         next_working_day(today)
         exit(1)
 
+    work_dir = f"work/portfolio/{config['subdir']}"
+    os.makedirs(work_dir, exist_ok=True)
     portfolio = None
 
     keys = [item['key'] for item in config['strategy']]
 
     if sync:
         # we assume tickers are correctly assigned to keys
-        with open(f"work/portfolio/{config['subdir']}/{today}.json") as f:
+        with open(f"{work_dir}/{today}.json") as f:
             portfolio = json.load(f)
             #print(self.portfolio)
 
@@ -70,28 +73,14 @@ def alpha_alloc(config, today, sync):
         print(broker.positions)
         sync = {
             "cash": broker.getcash(),
-            "equity": broker.getvalue(),
-            'ra': {
-                'tickers': {},
-                'cash': 0,
-                'equity': 0
-            },
-            'dt': {
-                'tickers': {},
-                'cash': 0,
-                'equity': 0
-            },
-            'ea': {
-                'tickers': {},
-                'cash': 0,
-                'equity': 0
-            },
-            'mr': {
+            "equity": broker.getvalue()
+        }
+        for item in config['strategy']:
+            sync[item['key']] = {
                 'tickers': {},
                 'cash': 0,
                 'equity': 0
             }
-        }
 
         # scan all keys and update tickers
         for key in keys:
@@ -115,7 +104,7 @@ def alpha_alloc(config, today, sync):
                         logger.info(f"{prefix}: update ENTRY price")
 
         #compute_totals(sync, keys)
-        fn = f"work/portfolio/{config['subdir']}/sync_{today}.json"
+        fn = f"{work_dir}/sync_{today}.json"
         with open(fn, 'w') as f:
             json.dump(sync, f, indent=4, sort_keys=True)
 
@@ -124,7 +113,7 @@ def alpha_alloc(config, today, sync):
 
     else:
         try:
-            with open(f"work/portfolio/{config['subdir']}/{today}.json") as f:
+            with open(f"{work_dir}/{today}.json") as f:
                 portfolio = json.load(f)
                 #print(self.portfolio)
         except FileNotFoundError:
@@ -143,7 +132,7 @@ def alpha_alloc(config, today, sync):
                     'equity': item_cash
                 }
             compute_totals(portfolio, keys)
-            save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
+            save_portfolio(portfolio, f"{work_dir}/{today}.json")
 
     new_portfolio = {
         "transitions": {
@@ -170,7 +159,7 @@ def alpha_alloc(config, today, sync):
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
-    save_portfolio(new_portfolio, f'work/portfolio/{config['subdir']}/{next_date_str}.json')
+    save_portfolio(new_portfolio, f"{work_dir}/{next_date_str}.json")
 
 
 if __name__ == '__main__':
@@ -193,7 +182,7 @@ if __name__ == '__main__':
     #    format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>')
     #    #filter = lambda record: record['extra'] is {})
     tm = time.localtime()
-    logger.add('log/%s/alpha_%04d%02d%02d.log' % (config['subdir'], tm.tm_year, tm.tm_mon, tm.tm_mday),
+    logger.add('log/%s/%04d%02d%02d.log' % (config['subdir'], tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
 
     logger.debug("")
