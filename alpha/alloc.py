@@ -440,6 +440,7 @@ class ETFAvalanches(AlphaStrategy):
 class MeanReversion(AlphaStrategy):
     # Rebalances weekly, checks stops daily
     SLOT_COUNT = 10
+    STOP_SIZE = 5  # percents
 
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'mr', portfolio['mr'], today)
@@ -511,6 +512,7 @@ class MeanReversion(AlphaStrategy):
                     'qty': alloc,
                     'entry': close,
                     'close': close,
+                    'stop': self.floor2(close * (100 - self.STOP_SIZE) / 100),
                     'type': 'market'
                 }
             else:
@@ -546,6 +548,6 @@ class MeanReversion(AlphaStrategy):
                     #self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
                         result.add(ticker)
-                if info['close'] / info['entry'] < 0.95:  # the current price is more than 10% below the entry price
+                if info['close'] / info['entry'] < (100 - self.STOP_SIZE) / 100:  # the current price is more than 10% below the entry price
                     result.add(ticker)
         return result
