@@ -5,12 +5,10 @@ from datetime import datetime, timedelta
 import json
 import sys
 import time
+import importlib
 from loguru import logger  # pip install loguru
 
 from broker import RStockTrader
-from alloc import AllocStrategy, DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
-
-KEYS = ['ra', 'dt', 'ea', 'mr']
 
 def write_tickers(tickers, fn):
     with open(fn, "w") as f:
@@ -20,10 +18,10 @@ def write_tickers(tickers, fn):
 def floor2(val):
     return int(val * 100) / 100
 
-def compute_totals(p):
+def compute_totals(p, keys):
     equity = 0
     cash = 0
-    for key in KEYS:
+    for key in keys:
         if key in p:
             equity += p[key]['equity']
             cash += p[key]['cash']
@@ -57,6 +55,8 @@ def alpha_alloc(config, today, sync):
         exit(1)
 
     portfolio = None
+
+    keys = [item['key'] for item in config['strategy']]
 
     if sync:
         # we assume tickers are correctly assigned to keys
@@ -94,7 +94,7 @@ def alpha_alloc(config, today, sync):
         }
 
         # scan all keys and update tickers
-        for key in KEYS:
+        for key in keys:
             sync[key]['cash'] = portfolio[key]['cash']
             sync[key]['equity'] = portfolio[key]['equity']
             for ticker, info in portfolio[key]['tickers'].items():
@@ -114,7 +114,7 @@ def alpha_alloc(config, today, sync):
                         sync[key]['tickers'][ticker]['entry'] = p['entry']
                         logger.info(f"{prefix}: update ENTRY price")
 
-        #compute_totals(sync)
+        #compute_totals(sync, keys)
         fn = f"work/portfolio/{config['subdir']}/sync_{today}.json"
         with open(fn, 'w') as f:
             json.dump(sync, f, indent=4, sort_keys=True)
@@ -130,51 +130,42 @@ def alpha_alloc(config, today, sync):
         except FileNotFoundError:
             cash = config['initial_cash']
             logger.debug(f"Starting with empty portfolio: {cash}")
-            cash30 = cash * 0.3
-            cash20 = cash * 0.2
             portfolio = {
                 'date': today,
                 'cash': cash,
-                'equity': cash,
-                'ra': {
-                    'tickers': {},
-                    'cash': cash30,
-                    'equity': cash30
-                },
-                'dt': {
-                    'tickers': {},
-                    'cash': cash20,
-                    'equity': cash20
-                },
-                'ea': {
-                    'tickers': {},
-                    'cash': cash20,
-                    'equity': cash20
-                },
-                'mr': {
-                    'tickers': {},
-                    'cash': cash30,
-                    'equity': cash30
-                }
+                'equity': cash
             }
-            compute_totals(portfolio)
+            for item in config['strategy']:
+                item_cash = floor2(cash * item['percent'] / 100)
+                portfolio[item['key']] = {
+                    'tickers': {},
+                    'cash': item_cash,
+                    'equity': item_cash
+                }
+            compute_totals(portfolio, keys)
             save_portfolio(portfolio, f"work/portfolio/{config['subdir']}/{today}.json")
 
-    new_portfolio = {"transitions": {}, "cash": 0}
-
-    STRAT = [RisingAssets, DynamicTreasures, ETFAvalanches, MeanReversion]
+    new_portfolio = {
+        "transitions": {
+            "text": f"Execute transitions at open {today}"
+        },
+        "cash": 0
+    }
  
-    for strategy_cls in STRAT:
-        s = strategy_cls(logger, portfolio.copy(), today)
+    module = importlib.import_module("alloc")
+
+    for item in config['strategy']:
+        args = (logger, item['key'], portfolio.copy(), today)
+        strategy_cls = getattr(module, item['class'])
+        s = strategy_cls(*args)
         new_portfolio[s.key], trans = s.allocate()
         if trans:
             new_portfolio["transitions"][s.key] = trans
 
     #logger.info('new_portfolio: ' + json.dumps(new_portfolio, indent=4, sort_keys=True))
-
-    compute_totals(new_portfolio)
+    compute_totals(new_portfolio, keys)
     logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
-    for key in KEYS:
+    for key in keys:
         logger.info(f"    {key}: {floor2(new_portfolio[key]['equity'] / new_portfolio['equity'] * 100)}%")
 
     next_date_str = next_working_day(today)

@@ -182,8 +182,8 @@ class AllocStrategy:
 
 class RisingAssets(AllocStrategy):
     # Rebalances monthly
-    def __init__(self, logger, portfolio, today):
-        super().__init__(logger, 'ra', portfolio['ra'], today)
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today)
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
             self.reinvest = True
@@ -248,8 +248,8 @@ class RisingAssets(AllocStrategy):
 
 class DynamicTreasures(AllocStrategy):
     # Rebalances weekly
-    def __init__(self, logger, portfolio, today):
-        super().__init__(logger, 'dt', portfolio['dt'], today)
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today)
         self.remains = self.tickers[-1]
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
@@ -312,8 +312,8 @@ class ETFAvalanches(AllocStrategy):
     # Rebalances daily
     SLOT_COUNT = 5
 
-    def __init__(self, logger, portfolio, today):
-        super().__init__(logger, 'ea', portfolio['ea'], today)
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today)
         self.remains = self.tickers[-1]
 
     def allocate(self):
@@ -409,8 +409,8 @@ class MeanReversion(AllocStrategy):
     SLOT_COUNT = 10
     STOP_SIZE = 5  # percents
 
-    def __init__(self, logger, portfolio, today):
-        super().__init__(logger, 'mr', portfolio['mr'], today)
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today)
         self.long_trend_ticker = self.tickers[-2]
         self.remains = self.tickers[-1]
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()

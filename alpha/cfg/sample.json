@@ -7,5 +7,11 @@
     },
     "initial_cash": 10000,
     "subdir": "test",
-    "broker": "test"
+    "broker": "test",
+    "strategy": [
+        {"key": "ra", "percent": 30, "class": "RisingAssets"},
+        {"key": "dt", "percent": 20, "class": "DynamicTreasures"},
+        {"key": "ea", "percent": 20, "class": "ETFAvalanches"},
+        {"key": "mr", "percent": 30, "class": "MeanReversion"}
+    ]
 }
