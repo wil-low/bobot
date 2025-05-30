@@ -8,7 +8,7 @@ import time
 from loguru import logger  # pip install loguru
 
 from broker import RStockTrader
-from alloc import AlphaStrategy, DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
+from alloc import AllocStrategy, DynamicTreasures, ETFAvalanches, MeanReversion, RisingAssets
 
 KEYS = ['ra', 'dt', 'ea', 'mr']
 

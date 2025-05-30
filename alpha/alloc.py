@@ -8,45 +8,20 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-class AlphaStrategy:
+class AllocStrategy:
     DB_FILE = "work/stock.sqlite"
 
     def __init__(self, logger, key, portfolio, today):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio
+        self.today = today
 
         self.log(f"========= init =========")
-        conn = sqlite3.connect(AlphaStrategy.DB_FILE)
 
-        self.tickers = []
-        if self.key == 'mr':
-            # load from DB instead of file
-            query = f"""
-            SELECT ticker_id, t.symbol
-                FROM (
-                    SELECT ticker_id, AVG(close * volume) AS avg_dollar_volume
-                    FROM prices
-                    WHERE date >= DATE(?, 'start of month', '-200 days')
-                    GROUP BY ticker_id
-                    ORDER BY avg_dollar_volume DESC
-                )  
-                JOIN tickers t ON ticker_id = t.id
-                WHERE t.type in ('CS', 'ADRC') AND t.disabled = 0
-                LIMIT 500
-            """
-            cursor = conn.cursor()
-            cursor.execute(query, (today,))
-            rows = cursor.fetchall()
-            self.tickers = [row[1] for row in rows]
-            # add existing positions that could be pushed out of top 500
-            for t in self.portfolio['tickers']:
-                if t not in self.tickers:
-                    self.tickers.append(t)
-            self.tickers += ['SPY', 'SHY']  # long trend and remains
-        else:
-            self.tickers = AlphaStrategy.load_tickers(f"cfg/{key}.txt")
+        self.tickers = self.get_tickers()
 
+        conn = sqlite3.connect(AllocStrategy.DB_FILE)
         self.data = {}
         for t in self.tickers:
             try:
@@ -108,17 +83,6 @@ class AlphaStrategy:
         return None
 
     @staticmethod
-    def load_all_tickers_from_db():
-        conn = sqlite3.connect(AlphaStrategy.DB_FILE)
-        query = f"""
-        SELECT id, symbol FROM tickers ORDER BY symbol
-        """
-        cursor = conn.cursor()
-        cursor.execute(query)
-        rows = cursor.fetchall()
-        return [row[1] for row in rows]
-
-    @staticmethod
     def compute_rsi(series, period=2):
         delta = series.diff()
 
@@ -141,6 +105,9 @@ class AlphaStrategy:
 
     def print_p(self, portfolio):
         return json.dumps(portfolio, sort_keys=True)
+    
+    def get_tickers(self):
+        return AllocStrategy.load_tickers(f"cfg/{self.key}.txt")
 
     def compute_portfolio_transition(self, old_portfolio, new_portfolio):
         adds = []
@@ -213,7 +180,7 @@ class AlphaStrategy:
         return set()  # tickers for positions to be closed
 
 
-class RisingAssets(AlphaStrategy):
+class RisingAssets(AllocStrategy):
     # Rebalances monthly
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'ra', portfolio['ra'], today)
@@ -279,7 +246,7 @@ class RisingAssets(AlphaStrategy):
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 
-class DynamicTreasures(AlphaStrategy):
+class DynamicTreasures(AllocStrategy):
     # Rebalances weekly
     def __init__(self, logger, portfolio, today):
         super().__init__(logger, 'dt', portfolio['dt'], today)
@@ -341,7 +308,7 @@ class DynamicTreasures(AlphaStrategy):
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
 
-class ETFAvalanches(AlphaStrategy):
+class ETFAvalanches(AllocStrategy):
     # Rebalances daily
     SLOT_COUNT = 5
 
@@ -360,7 +327,7 @@ class ETFAvalanches(AlphaStrategy):
                     if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
                         #print(f"{ticker}: negative total return over the past month")
                         #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
-                        rsi = AlphaStrategy.compute_rsi(d.close).iloc[-10:]
+                        rsi = AllocStrategy.compute_rsi(d.close).iloc[-10:]
                         #print(f"{ticker}: rsi {rsi}")
                         if rsi.iloc[-1] > 70:
                             #print(f"{ticker}: rsi {rsi}")
@@ -431,13 +398,13 @@ class ETFAvalanches(AlphaStrategy):
                 d = self.data[ticker]
                 if d.close.iloc[-1] > d.close.iloc[-21 * 1 - 1]:  # positive total return over the past month
                     result.add(ticker)
-                rsi = AlphaStrategy.compute_rsi(d.close).iloc[-1]
+                rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
                 if rsi < 15:
                     result.add(ticker)
         return result
 
 
-class MeanReversion(AlphaStrategy):
+class MeanReversion(AllocStrategy):
     # Rebalances weekly, checks stops daily
     SLOT_COUNT = 10
     STOP_SIZE = 5  # percents
@@ -470,7 +437,7 @@ class MeanReversion(AlphaStrategy):
                                 if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
                                     weekly_series = d.close.resample('W').last()
                                     #print(weekly_series)
-                                    rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
+                                    rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
                                     if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
                                         #print(f"allocate {ticker}: rsi {rsi}")
                                         daily_return = d.close / d.close.shift(1)
@@ -544,10 +511,38 @@ class MeanReversion(AlphaStrategy):
                 if self.weekday == 0:  # Monday (end of week in fact)
                     weekly_series = d.close.resample('W').last()
                     #print(weekly_series)
-                    rsi = AlphaStrategy.compute_rsi(weekly_series).iloc[-1]
+                    rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
                     #self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
                         result.add(ticker)
                 if info['close'] / info['entry'] < (100 - self.STOP_SIZE) / 100:  # the current price is more than 10% below the entry price
                     result.add(ticker)
         return result
+
+    def get_tickers(self):
+        # load from DB instead of file
+        conn = sqlite3.connect(AllocStrategy.DB_FILE)
+
+        query = f"""
+        SELECT ticker_id, t.symbol
+            FROM (
+                SELECT ticker_id, AVG(close * volume) AS avg_dollar_volume
+                FROM prices
+                WHERE date >= DATE(?, 'start of month', '-200 days')
+                GROUP BY ticker_id
+                ORDER BY avg_dollar_volume DESC
+            )  
+            JOIN tickers t ON ticker_id = t.id
+            WHERE t.type in ('CS', 'ADRC') AND t.disabled = 0
+            LIMIT 500
+        """
+        cursor = conn.cursor()
+        cursor.execute(query, (self.today,))
+        rows = cursor.fetchall()
+        tickers = [row[1] for row in rows]
+        # add existing positions that could be pushed out of top 500
+        for t in self.portfolio['tickers']:
+            if t not in tickers:
+                tickers.append(t)
+        tickers += ['SPY', 'SHY']  # long trend and remains
+        return tickers
