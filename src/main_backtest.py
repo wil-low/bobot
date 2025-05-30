@@ -15,8 +15,8 @@ sys.path.append(parent_dir + '/backtrader')
 import backtrader as bt
 
 from broker.bo import BinaryOptionsBroker
-from feed.datafeed import HistDataCSVData, TiingoCSVData
-from strategy import Anty, KissIchimoku, RSIPowerZones, CRSIShort
+from feed.datafeed import HistDataCSVData, SQLiteData, TiingoCSVData
+from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort
 from strategy_stat import CointegratedPairs
 
 def logged_print(message):
@@ -107,6 +107,14 @@ def run_bot():
                     # Do not pass values after this date
                     #todate=datetime(2023, 2, 27),
                 )
+            elif config['feed']['provider'] == "sqlite":  # crypto
+                fn = f'alpha/work/stock.sqlite'
+                data = SQLiteData.from_sqlite(
+                    symbol=symbol,
+                    database=fn,
+                    # fromdate=datetime(2005, 1, 1),
+                    # todate=datetime(2023, 2, 27),
+                )
             else:
                 raise NotImplementedError(config['feed']['provider'])
 
@@ -144,6 +152,10 @@ def run_bot():
     elif config["strategy"]["name"] == 'CRSIShort':
         cerebro.addsizer(bt.sizers.PercentSizer, percents=1)
         cerebro.addstrategy(CRSIShort, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'TPS':
+        cerebro.addstrategy(TPS, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'CRSISP500':
+        cerebro.addstrategy(CRSISP500, logger=logger, trade=config['trade'])
     else:
         raise NotImplementedError(config["strategy"]["name"])
 

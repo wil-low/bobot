@@ -722,3 +722,255 @@ class CRSIShort(bt.Strategy):
                 if exit:
                     self.log(d, 'EXIT POSITION, size %.2f, %.6f' % (pos.size, d.close[0]))
                     self.close(data=d)
+
+
+class TPS(bt.Strategy):
+    params = (
+        ('trade', {}),
+        ('long_entry', 25),
+        ('long_exit', 70),
+        ('short_entry', 75),
+        ('short_exit', 30),
+        ('logger', None),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        ticker = ''
+        if data:
+            ticker = data.ticker
+        if self.params.logger:
+            self.params.logger.debug('%-10s: %s' % (ticker, txt))
+        else:
+            print('%-10s: %s' % (ticker, txt))
+
+    def __init__(self):
+        self.log(None, f"params: {self.params._getkwargs()}")
+        self.o = dict()
+        self.sma = dict()
+        self.rsi = dict()
+        self.pos_stage = dict()
+        self.last_entry_price = dict()
+        self.lot_size = dict()
+        for d in self.datas:
+            self.sma[d] = bt.indicators.SMA(d, period=200)
+            self.rsi[d] = bt.indicators.RSI_Safe(d, period=2)
+            self.pos_stage[d] = 0
+            self.last_entry_price[d] = None
+            self.lot_size[d] = None
+
+        if self.params.trade['send_signals']:
+            self.broker.post_message(f"{self.__class__.__name__} started")
+
+    def notify_order(self, order):
+        #self.log(order.data, f"notify_order: {str(order)}")
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
+
+    def submit_buy(self, d, lot_count, text):
+        order = self.buy(data=d, size=self.lot_size[d] * lot_count, exectype=bt.Order.Market)
+        self.log(d, 'BUY %s %s (%d), %.3f at %.3f, lot_count %d\n' % 
+            (d.ticker, text, order.ref, order.size, order.created.price, lot_count))
+        self.last_entry_price[d] = order.created.price
+
+    def submit_sell(self, d, lot_count, text):
+        order = self.sell(data=d, size=self.lot_size[d] * lot_count, exectype=bt.Order.Market)
+        self.log(d, 'SELL %s %s (%d), %.3f at %.3f, lot_count %d\n' % 
+            (d.ticker, text, order.ref, order.size, order.created.price, lot_count))
+        self.last_entry_price[d] = order.created.price
+
+    def next(self):
+        for i, d in enumerate(self.datas):
+            if d.volume == 0:
+                continue
+
+            if self.lot_size[d] is None:
+                self.lot_size[d] = self.params.trade['position_value'] / d.close[0]
+                self.log(d, f"Lot size = {self.lot_size[d]}")
+            
+            self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
+
+            p = self.getposition(d)
+            if p is None or p.size == 0:
+                # no position
+                self.pos_stage[d] = 1
+                if d.close[0] > self.sma[d].sma[0]:
+                    if self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry:
+                        # 2 periods below, go long
+                        self.submit_buy(d, self.pos_stage[d], 'CREATE')
+                        self.pos_stage[d] += 1
+                elif d.close[0] < self.sma[d].sma[0]:
+                    if self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry:
+                        # 2 periods above, go short
+                        self.submit_sell(d, self.pos_stage[d], 'CREATE')
+                        self.pos_stage[d] += 1
+            else:
+                if p.size > 0:
+                    # in long position
+                    if self.rsi[d].rsi[0] > self.params.long_exit:
+                        self.log(d, "CLOSE LONG POSITION")
+                        self.close(d)
+                    elif d.close[0] > self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] < self.last_entry_price[d]:
+                        self.submit_buy(d, self.pos_stage[d], 'ADD')
+                        self.pos_stage[d] += 1
+                elif p.size < 0:
+                    # in short position
+                    if self.rsi[d].rsi[0] < self.params.short_exit:
+                        self.log(d, "CLOSE SHORT POSITION")
+                        self.close(d)
+                    elif d.close[0] < self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] > self.last_entry_price[d]:
+                        self.submit_sell(d, self.pos_stage[d], 'ADD')
+                        self.pos_stage[d] += 1
+
+
+class CRSISP500(bt.Strategy):
+    params = (
+        ('trade', {}),
+        ('crsi_setup', 10),  # The stock closes with ConnorsRSI(3, 2, 100) value less than W, where W is 5 or 10
+        ('percents_setup', 50),  # The stock closing price is in the bottom X % of the day's range, where X = 25, 50, 75 or 100
+        ('percents_entry', 8),  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
+        ('crsi_exit', 50),  # Exit when the stock closes with ConnorsRSI(3, 2, 100) value greater than Z, where W is 50 or 70
+        ('logger', None),
+        ('leverage', None),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        ticker = ''
+        if data:
+            ticker = data.ticker
+        if self.params.logger:
+            self.params.logger.debug('%-10s: %s' % (ticker, txt))
+        else:
+            print('%-10s: %s' % (ticker, txt))
+
+    def __init__(self):
+        self.log(None, f"params: {self.params._getkwargs()}")
+
+        # To keep track of pending orders
+        self.order = {}
+        self.crsi = {}
+        self.lot_size = {}
+        for d in self.datas:
+            self.order[d] = None
+            self.crsi[d] = ConnorsRSI(d)
+            self.lot_size[d] = None
+
+    def notify_order(self, order):
+        #self.log(order.data, f"notify_order: {str(order)}")
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
+        if not trade.isclosed:
+            return
+        self.log(trade.data, '%s: OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.data.datetime.datetime(0).isoformat(), trade.pnl, trade.pnlcomm, self.broker.getcash()))
+
+    def next(self):
+        pos_count = 0
+        for i, d in enumerate(self.datas):
+            if self.getposition(d).size != 0:
+                pos_count += 1
+        free_slots = 15 - pos_count
+        if pos_count:
+            self.log(d, "%s: pos_count %d" % (d.datetime.datetime(0).isoformat(), pos_count))
+
+        for i, d in enumerate(self.datas):
+            if d.volume == 0:
+                continue
+
+            if self.lot_size[d] is None:
+                self.lot_size[d] = self.params.trade['position_value'] / d.close[0]
+                self.log(d, f"Lot size = {self.lot_size[d]}")
+            
+            #self.log(d, "%s: c %.5f, crsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.crsi[d][0]))
+            if free_slots <= 0:
+                break
+            p = self.getposition(d)
+            # Check if we are in the market
+            if p.size == 0:
+                if self.order[d]: 
+                    self.cancel(self.order[d])
+                    self.order[d] = None
+                # Not yet ... we MIGHT BUY if ...
+                day_range = d.high[-1] - d.low[-1]
+                bottom_percent = d.low[-1] + day_range * self.params.percents_setup / 100
+                if self.crsi[d][-1] < self.params.crsi_setup and d.close[-1] < bottom_percent:
+                    px = d.close[-1] * (100 - self.params.percents_entry) / 100
+                    # Keep track of the created order to avoid a 2nd order
+                    self.order[d] = self.buy(data=d, price=px, size=self.lot_size[d], exectype=bt.Order.Limit)
+                    self.log(d, '%s: BUY CREATE, %.2f at %.2f' % (d.datetime.datetime(0).isoformat(), self.order[d].size, self.order[d].created.price))
+                    free_slots -= 1
+            else:
+                if self.crsi[d][0] > self.params.crsi_exit:
+                    self.log(d, '%s: EXIT POSITION, %.2f' % (d.datetime.datetime(0).isoformat(), d.close[0]))
+                    self.close(d)
+                    self.order[d] = None
+

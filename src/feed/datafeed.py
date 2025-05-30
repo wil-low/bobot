@@ -2,6 +2,8 @@
 
 import os
 import backtrader as bt
+import pandas as pd
+import sqlite3
 import queue
 import threading
 from datetime import datetime, timezone
@@ -40,6 +42,32 @@ class TiingoCSVData(bt.feeds.GenericCSVData):
 		('openinterest', -1),
 		('reverse', False)
 	)
+
+
+class SQLiteData(bt.feeds.PandasData):
+    @classmethod
+    def from_sqlite(cls, symbol, database, fromdate=None, todate=None):
+        # Load data from SQLite
+        conn = sqlite3.connect(database)
+        query = """
+            SELECT p.date, p.open, p.high, p.low, p.close, p.volume
+            FROM prices p
+            JOIN tickers t ON t.id = p.ticker_id
+            WHERE t.symbol = ?
+            ORDER BY p.date
+        """
+        df = pd.read_sql(query, conn, params=(symbol,), parse_dates=["date"])
+        conn.close()
+
+        df.set_index('date', inplace=True)
+        if fromdate:
+            df = df[df.index >= pd.to_datetime(fromdate)]
+        if todate:
+            df = df[df.index <= pd.to_datetime(todate)]
+
+        # Return a PandasData instance
+        return cls(dataname=df)
+
 
 class BobotLiveDataBase(bt.feeds.DataBase):
     """
