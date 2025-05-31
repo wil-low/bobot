@@ -11,7 +11,7 @@ import pandas as pd
 class AllocStrategy:
     DB_FILE = "work/stock.sqlite"
 
-    def __init__(self, logger, key, portfolio, today, limit=252):
+    def __init__(self, logger, key, portfolio, today, limit=253):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio
@@ -452,9 +452,9 @@ class MeanReversion(AllocStrategy):
     STOP_SIZE = 5  # percents
 
     def __init__(self, logger, key, portfolio, today):
+        self.long_trend_ticker = 'SPY'
+        self.remains = 'SHY'
         super().__init__(logger, key, portfolio[key], today)
-        self.long_trend_ticker = self.tickers[-2]
-        self.remains = self.tickers[-1]
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
@@ -586,7 +586,7 @@ class MeanReversion(AllocStrategy):
         for t in self.portfolio['tickers']:
             if t not in tickers and t != self.remains:
                 tickers.append(t)
-        tickers += ['SPY', 'SHY']  # long trend and remains
+        tickers += [self.long_trend_ticker, self.remains]  # long trend and remains
         return tickers
 
 
