@@ -587,7 +587,7 @@ class CRSIShort(bt.Strategy):
         ('highest_n', 10),  # Today’s High is the highest high in the past N days, where N is 7, 10 or 13.
 
         # If the previous day was a Setup, then we Enter a trade by:
-        ('percent_entry', 6),  # Submitting a limit order to short the stock at a price Y % above yesterday’s close, where Y is 2, 4, 6, 8, or 10.
+W        ('percent_entry', 6),  # Submitting a limit order to short the stock at a price Y % above yesterday’s close, where Y is 2, 4, 6, 8, or 10.
         ('variable_entry', True),   # Var. Entry Limits is Yes (Y) when the test used an entry limit of 1.5 times normal for stocks that were
                                     # above the MA(200). When the same limit was used regardless of whether the price was above or below
                                     # the MA(200), this column contains a No (N). We see many more Y’s than N’s, indicating that using
@@ -619,6 +619,7 @@ class CRSIShort(bt.Strategy):
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
         self.o = dict()
+        self.lot_size = {}
         self.avg_volume = dict()
         self.crsi = dict()
         self.hv = dict()
@@ -627,6 +628,7 @@ class CRSIShort(bt.Strategy):
         self.sma5 = dict()
         self.sma200 = dict()
         for d in self.datas:
+            self.lot_size[d] = None
             self.avg_volume[d] = bt.indicators.Average(d.volume, period=21)
             self.crsi[d] = ConnorsRSI(d)
             self.hv[d] = HistoricalVolatility(d, period=100)
@@ -648,36 +650,45 @@ class CRSIShort(bt.Strategy):
         if order.status in [order.Completed]:
             if order.isbuy():
                 self.log(order.data,
-                    'BUY EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
-                    (order.executed.price,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
                     order.executed.value,
                     order.executed.comm,
                     order.created.price))
 
             else:  # Sell
                 self.log(order.data,
-                     'SELL EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
-                    (order.executed.price,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
                     order.executed.value,
                     order.executed.comm,
                     order.created.price))
 
-        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            self.log(order.data, 'Order Canceled/Margin/Rejected')
-
-        self.o[order.data] = None
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
 
     def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
         if not trade.isclosed:
             return
-        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
-                 (trade.pnl, trade.pnlcomm))
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
 
     def next(self):
         for i, d in enumerate(self.datas):
+            if self.lot_size[d] is None:
+                self.lot_size[d] = self.params.trade['position_value'] / d.close[0]
+                self.log(d, f"Lot size = {self.lot_size[d]}, close={d.close[0]}")
+
             pos = self.getposition(d)
             # Check if we are in the market
-            if not pos:
+            if pos.size == 0:
                 if self.o.get(d, None) is not None:
                     self.log(d, f"CANCEL ENTRY ORDER, close {d.close[0]}\n")
                     self.cancel(self.o[d])
@@ -700,7 +711,7 @@ class CRSIShort(bt.Strategy):
                     entry_offset = self.params.percent_entry
                     if self.params.variable_entry and d.close[0] > self.sma200[d][0]:
                         entry_offset *= 1.5
-                    order = self.sell(data=d, exectype=bt.Order.Limit, price=d.close[0] * (100 + entry_offset) / 100)
+                    order = self.sell(data=d, exectype=bt.Order.Limit, size=self.lot_size[d], price=d.close[0] * (100 + entry_offset) / 100)
                     self.log(d, 'SELL CREATE (%d), %.3f at %.3f\n' % (order.ref, order.size, order.created.price))
                     self.o[d] = order
             else:
@@ -864,7 +875,7 @@ class CRSISP500(bt.Strategy):
         ('trade', {}),
         ('crsi_setup', 10),  # The stock closes with ConnorsRSI(3, 2, 100) value less than W, where W is 5 or 10
         ('percents_setup', 50),  # The stock closing price is in the bottom X % of the day's range, where X = 25, 50, 75 or 100
-        ('percents_entry', 8),  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
+        ('percents_entry', 4),  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
         ('crsi_exit', 50),  # Exit when the stock closes with ConnorsRSI(3, 2, 100) value greater than Z, where W is 50 or 70
         ('logger', None),
         ('leverage', None),
@@ -934,15 +945,17 @@ class CRSISP500(bt.Strategy):
                  (trade.data.datetime.datetime(0).isoformat(), trade.pnl, trade.pnlcomm, self.broker.getcash()))
 
     def next(self):
-        pos_count = 0
-        for i, d in enumerate(self.datas):
-            if self.getposition(d).size != 0:
-                pos_count += 1
-        free_slots = 15 - pos_count
-        if pos_count:
-            self.log(d, "%s: pos_count %d" % (d.datetime.datetime(0).isoformat(), pos_count))
+    # Step 1: Calculate used slots globally
+        used_slots = sum(
+            1 for d in self.datas
+            if self.getposition(d).size != 0 or self.order.get(d)
+        )
+        free_slots = 15 - used_slots
 
-        for i, d in enumerate(self.datas):
+        # Optional logging
+        #self.log(None, f"Global: used_slots={used_slots}, free_slots={free_slots}")
+
+        for d in self.datas:
             if d.volume == 0:
                 continue
 
@@ -951,26 +964,29 @@ class CRSISP500(bt.Strategy):
                 self.log(d, f"Lot size = {self.lot_size[d]}")
             
             #self.log(d, "%s: c %.5f, crsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.crsi[d][0]))
-            if free_slots <= 0:
-                break
+
             p = self.getposition(d)
             # Check if we are in the market
             if p.size == 0:
                 if self.order[d]: 
                     self.cancel(self.order[d])
                     self.order[d] = None
-                # Not yet ... we MIGHT BUY if ...
-                day_range = d.high[-1] - d.low[-1]
-                bottom_percent = d.low[-1] + day_range * self.params.percents_setup / 100
-                if self.crsi[d][-1] < self.params.crsi_setup and d.close[-1] < bottom_percent:
-                    px = d.close[-1] * (100 - self.params.percents_entry) / 100
-                    # Keep track of the created order to avoid a 2nd order
-                    self.order[d] = self.buy(data=d, price=px, size=self.lot_size[d], exectype=bt.Order.Limit)
-                    self.log(d, '%s: BUY CREATE, %.2f at %.2f' % (d.datetime.datetime(0).isoformat(), self.order[d].size, self.order[d].created.price))
-                    free_slots -= 1
+                if free_slots > 0:
+                    # Not yet ... we MIGHT BUY if ...
+                    day_range = d.high[-1] - d.low[-1]
+                    bottom_percent = d.low[-1] + day_range * self.params.percents_setup / 100
+                    if self.crsi[d][-1] < self.params.crsi_setup and d.close[-1] < bottom_percent:
+                        px = d.close[-1] * (100 - self.params.percents_entry) / 100
+                        # Keep track of the created order to avoid a 2nd order
+                        self.order[d] = self.buy(data=d, price=px, size=self.lot_size[d], exectype=bt.Order.Limit)
+                        self.log(d, '%s: BUY CREATE, %.2f at %.2f' % (d.datetime.datetime(0).isoformat(), self.order[d].size, self.order[d].created.price))
+                        free_slots -= 1
             else:
                 if self.crsi[d][0] > self.params.crsi_exit:
                     self.log(d, '%s: EXIT POSITION, %.2f' % (d.datetime.datetime(0).isoformat(), d.close[0]))
                     self.close(d)
                     self.order[d] = None
-
+        if free_slots >= 0:
+            self.log(d, "%s: free slots %d" % (d.datetime.datetime(0).isoformat(), free_slots))
+        else:
+            raise ValueError("free_slots < 0")

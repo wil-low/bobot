@@ -150,7 +150,6 @@ def run_bot():
     elif config["strategy"]["name"] == 'CointegratedPairs':
         cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CRSIShort':
-        cerebro.addsizer(bt.sizers.PercentSizer, percents=1)
         cerebro.addstrategy(CRSIShort, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'TPS':
         cerebro.addstrategy(TPS, logger=logger, trade=config['trade'])

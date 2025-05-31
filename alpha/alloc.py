@@ -592,14 +592,14 @@ class MeanReversion(AllocStrategy):
 
 class CRSISP500(AllocStrategy):
     # Rebalances daily
-    SLOT_COUNT = 5
+    SLOT_COUNT = 15
 
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio[key], today, 110)
         self.params = {
             'crsi_setup': 10,  # The stock closes with ConnorsRSI(3, 2, 100) value less than W, where W is 5 or 10
             'percents_setup': 50,  # The stock closing price is in the bottom X % of the day's range, where X = 25, 50, 75 or 100
-            'percents_entry': 8,  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
+            'percents_entry': 4,  # If the previous day was a Setup, submit a limit order to buy at a price Y % below yesterday's close, where Y is 2, 4, 6, 8 or 10
             'crsi_exit': 50  # Exit when the stock closes with ConnorsRSI(3, 2, 100) value greater than Z, where W is 50 or 70
         }
         self.remains = self.tickers[-1]
@@ -617,6 +617,7 @@ class CRSISP500(AllocStrategy):
                     bottom_percent = d.low.iloc[-1] + day_range * self.params['percents_setup'] / 100
                     crsi10 = self.compute_crsi(d.close).iloc[-110:]
                     crsi = crsi10.iloc[-1]
+                    #self.log(f"{ticker}: crsi {crsi}, {d.close.iloc[-1]} < {bottom_percent}")
                     if crsi < self.params['crsi_setup'] and d.close.iloc[-1] < bottom_percent:
                         #self.log(ticker)
                         #self.log(d.close.iloc[-110:])
@@ -673,7 +674,7 @@ class CRSISP500(AllocStrategy):
 
         # remains alloc
         close = self.data[self.remains].close.iloc[-1]
-        alloc = int(alloc_slot * free_slots / close)
+        alloc = int(alloc_slot * free_slots / close / 5)  # leverage 1:4 vs 1:20 for stocks
         if alloc >= 1:
             close = self.data[self.remains].close.iloc[-1]
             value = self.floor2(close * alloc)
