@@ -841,33 +841,53 @@ class TPS(bt.Strategy):
             if p is None or p.size == 0:
                 # no position
                 self.pos_stage[d] = 1
-                if d.close[0] > self.sma[d].sma[0]:
-                    if self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry:
+                if d.close[0] > self.sma[d].sma[0] and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry:
                         # 2 periods below, go long
-                        self.submit_buy(d, self.pos_stage[d], 'CREATE')
-                        self.pos_stage[d] += 1
-                elif d.close[0] < self.sma[d].sma[0]:
-                    if self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry:
+                        if self.params.trade['send_orders']:
+                            self.submit_buy(d, self.pos_stage[d], 'CREATE')
+                            self.pos_stage[d] += 1
+                        else:
+                            self.log(d, "SIGNAL BUY")
+                        if self.params.trade['send_signals']:
+                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   BUY  ⬆️  , rsi={self.rsi[d].rsi[0]:.2f}, sma200={self.sma[d].sma[0]:.4f}"
+                            self.broker.post_message(message)
+
+                elif d.close[0] < self.sma[d].sma[0] and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry:
                         # 2 periods above, go short
-                        self.submit_sell(d, self.pos_stage[d], 'CREATE')
-                        self.pos_stage[d] += 1
+                        if self.params.trade['send_orders']:
+                            self.submit_sell(d, self.pos_stage[d], 'CREATE')
+                            self.pos_stage[d] += 1
+                        else:
+                            self.log(d, "SIGNAL SELL")
+                        if self.params.trade['send_signals']:
+                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   SELL ⬇️  , rsi={self.rsi[d].rsi[0]:.2f}, sma200={self.sma[d].sma[0]:.4f}"
+                            self.broker.post_message(message)
+                elif self.params.trade['send_signals']:
+                    sign = '⚠️' if self.rsi[d].rsi[0] > self.params.long_exit or self.rsi[d].rsi[0] < self.params.short_exit else ' '
+                    message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker}, check position, rsi={self.rsi[d].rsi[0]:.2f} {sign}"
+                    self.broker.post_message(message)
+
             else:
                 if p.size > 0:
                     # in long position
                     if self.rsi[d].rsi[0] > self.params.long_exit:
                         self.log(d, "CLOSE LONG POSITION")
-                        self.close(d)
+                        if self.params.trade['send_orders']:
+                            self.close(d)
                     elif d.close[0] > self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] < self.last_entry_price[d]:
-                        self.submit_buy(d, self.pos_stage[d], 'ADD')
-                        self.pos_stage[d] += 1
+                        if self.params.trade['send_orders']:
+                            self.submit_buy(d, self.pos_stage[d], 'ADD')
+                            self.pos_stage[d] += 1
                 elif p.size < 0:
                     # in short position
                     if self.rsi[d].rsi[0] < self.params.short_exit:
                         self.log(d, "CLOSE SHORT POSITION")
-                        self.close(d)
+                        if self.params.trade['send_orders']:
+                            self.close(d)
                     elif d.close[0] < self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] > self.last_entry_price[d]:
-                        self.submit_sell(d, self.pos_stage[d], 'ADD')
-                        self.pos_stage[d] += 1
+                        if self.params.trade['send_orders']:
+                            self.submit_sell(d, self.pos_stage[d], 'ADD')
+                            self.pos_stage[d] += 1
 
 
 class CRSISP500(bt.Strategy):
