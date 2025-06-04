@@ -86,7 +86,7 @@ def load_ticker_info():
 
 
 if __name__ == '__main__':
-    DB_FILE = "alpha/work/stock.sqlite"
+    DB_FILE = "work/stock.sqlite"
 
     # === Token and date setup ===
     token = os.environ.get("TOKEN")
