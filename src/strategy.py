@@ -587,7 +587,7 @@ class CRSIShort(bt.Strategy):
         ('highest_n', 10),  # Today’s High is the highest high in the past N days, where N is 7, 10 or 13.
 
         # If the previous day was a Setup, then we Enter a trade by:
-W        ('percent_entry', 6),  # Submitting a limit order to short the stock at a price Y % above yesterday’s close, where Y is 2, 4, 6, 8, or 10.
+        ('percent_entry', 6),  # Submitting a limit order to short the stock at a price Y % above yesterday’s close, where Y is 2, 4, 6, 8, or 10.
         ('variable_entry', True),   # Var. Entry Limits is Yes (Y) when the test used an entry limit of 1.5 times normal for stocks that were
                                     # above the MA(200). When the same limit was used regardless of whether the price was above or below
                                     # the MA(200), this column contains a No (N). We see many more Y’s than N’s, indicating that using

@@ -17,7 +17,8 @@ import backtrader as bt
 from broker.bo import BinaryOptionsBroker
 from feed.datafeed import HistDataCSVData, SQLiteData, TiingoCSVData
 from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort
-from strategy_stat import CointegratedPairs
+from strategy_stat import CointegratedPairs, MarketNeutral
+from formulaic import AlphaCombination
 
 def logged_print(message):
     logger.info(message)
@@ -120,10 +121,10 @@ def run_bot():
 
             data.ticker = symbol
             data.timeframe_min = timeframe_min
-            if timeframe_min == 1440:
-                cerebro.adddata(data)
-            else:
-                cerebro.resampledata(data, timeframe=timeframe, compression=compression)
+            #if timeframe_min == 1440:
+            #    cerebro.adddata(data)
+            #else:
+            cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
     if config['trade']['broker'] == "BO":
         broker = BinaryOptionsBroker(
@@ -149,6 +150,10 @@ def run_bot():
         cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CointegratedPairs':
         cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'MarketNeutral':
+        cerebro.addstrategy(MarketNeutral, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'AlphaCombination':
+        cerebro.addstrategy(AlphaCombination, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CRSIShort':
         cerebro.addstrategy(CRSIShort, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'TPS':

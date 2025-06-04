@@ -20,13 +20,13 @@ class HistDataCSVData(bt.feeds.GenericCSVData):
         ('reverse', False)
     )
 
-    def _loadline(self, linetokens):
-        try:
-            # Force volume to 1 regardless of input
-            linetokens[5] = 1.0
-        except IndexError:
-            return False  # Skip malformed lines
-        return super()._loadline(linetokens)
+    #def _loadline(self, linetokens):
+    #    try:
+    #        # Force volume to 1 regardless of input
+    #        linetokens[5] = 1.0
+    #    except IndexError:
+    #        return False  # Skip malformed lines
+    #    return super()._loadline(linetokens)
 
 class TiingoCSVData(bt.feeds.GenericCSVData):
 	params = (

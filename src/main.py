@@ -20,7 +20,7 @@ from feed.deriv import DerivLiveData
 from feed.okx import OKXLiveData
 from feed.bybit import BybitLiveData
 from strategy import Anty, KissIchimoku, RSIPowerZones
-from strategy_stat import CointegratedPairs
+from strategy_stat import CointegratedPairs, MarketNeutral
 
 def run_bot():
     config = {}
@@ -97,6 +97,8 @@ def run_bot():
         cerebro.addstrategy(KissIchimoku, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CointegratedPairs':
         cerebro.addstrategy(CointegratedPairs, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'MarketNeutral':
+        cerebro.addstrategy(MarketNeutral, logger=logger, trade=config['trade'])
 
     print(f"🔁 Starting live strategy {config['strategy']['name']}...")
     cerebro.run()
