@@ -179,7 +179,7 @@ class AllocStrategy:
             diff = round(new_qty - old_qty, 2)
             if diff > 0:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
-                if new_tickers[ticker]['type'] == 'limit':
+                if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
                 if self.key == 'mr' and old_qty == 0:
                     text += ', record entry price'
@@ -753,25 +753,28 @@ class TPS(AllocStrategy):
         new_portfolio = copy.deepcopy(self.portfolio)
         top = []
         for ticker in self.tickers:
-            d = self.data[ticker]
-            sma = self.compute_sma(d.close, 200)
-            rsi = self.compute_rsi(d.close, 2)
-            if not ticker in self.portfolio['tickers']:
-                # new ticker
-                if d.close.iloc[-1] > sma.iloc[-1] and rsi.iloc[-2] < self.params['long_entry'] and rsi.iloc[-1] < self.params['long_entry']:
-                    # 2 periods below, go long
-                    top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'buy', 'lots': 1, 'last_px': d.close.iloc[-1]})
-                elif d.close.iloc[-1] < sma.iloc[-1] and rsi.iloc[-2] > self.params['short_entry'] and rsi.iloc[-1] > self.params['short_entry']:
-                    # 2 periods above, go short
-                    top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'sell', 'lots': 1, 'last_px': d.close.iloc[-1]})
-            else:
-                # existing position
-                if not ticker in tickers_to_close:
-                    info = self.portfolio['tickers'][ticker]
-                    if (info['qty'] > 0 and d.close.iloc[-1] < info['last_px']) or (info['qty'] < 0 and d.close.iloc[-1] > info['last_px']):
-                        lots = info['last_lot']
-                        if lots < 4:
-                            top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'buy' if info['qty'] > 0 else 'sell', 'lots': lots + 1, 'last_px': d.close.iloc[-1]})
+            try:
+                d = self.data[ticker]
+                sma = self.compute_sma(d.close, 200)
+                rsi = self.compute_rsi(d.close, 2)
+                if not ticker in self.portfolio['tickers']:
+                    # new ticker
+                    if d.close.iloc[-1] > sma.iloc[-1] and rsi.iloc[-2] < self.params['long_entry'] and rsi.iloc[-1] < self.params['long_entry']:
+                        # 2 periods below, go long
+                        top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'buy', 'lots': 1, 'last_px': d.close.iloc[-1]})
+                    elif d.close.iloc[-1] < sma.iloc[-1] and rsi.iloc[-2] > self.params['short_entry'] and rsi.iloc[-1] > self.params['short_entry']:
+                        # 2 periods above, go short
+                        top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'sell', 'lots': 1, 'last_px': d.close.iloc[-1]})
+                else:
+                    # existing position
+                    if not ticker in tickers_to_close:
+                        info = self.portfolio['tickers'][ticker]
+                        if (info['qty'] > 0 and d.close.iloc[-1] < info['last_px']) or (info['qty'] < 0 and d.close.iloc[-1] > info['last_px']):
+                            lots = info['last_lot']
+                            if lots < 4:
+                                top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'side': 'buy' if info['qty'] > 0 else 'sell', 'lots': lots + 1, 'last_px': d.close.iloc[-1]})
+            except KeyError:
+                pass
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
         self.log(f"alloc_slot = {alloc_slot} per lot")
@@ -826,3 +829,87 @@ class TPS(AllocStrategy):
             if info['qty'] < 0 and rsi < self.params['short_exit']:
                 result.add(ticker)
         return result
+
+
+class VolPanics(AllocStrategy):
+    # Rebalances daily
+    SLOT_COUNT = 1
+
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio[key], today, 202)
+
+    def allocate(self):
+        tickers_to_close = self.to_be_closed()
+        self.log(tickers_to_close)
+        new_portfolio = copy.deepcopy(self.portfolio)
+        top = []
+        for ticker in self.tickers:
+            d = self.data[ticker]
+            sma = self.compute_sma(d.close, 5)
+            rsi = self.compute_rsi(d.close, 4)
+            self.log(f"{ticker} close={d.close.iloc[-1]}, sma={sma.iloc[-1]:.2f}, rsi={rsi.iloc[-1]:.2f}")
+            if not ticker in self.portfolio['tickers']:
+                # new ticker
+                if d.close.iloc[-1] > sma.iloc[-1] and rsi.iloc[-1] > 70:
+                    top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'lots': 1, 'last_px': d.close.iloc[-1]})
+            else:
+                # existing position
+                if not ticker in tickers_to_close:
+                    info = self.portfolio['tickers'][ticker]
+                    if d.close.iloc[-1] > info['last_px']:
+                        lots = info['last_lot']
+                        if lots < 4:
+                            top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'lots': lots + 1, 'last_px': d.close.iloc[-1]})
+
+        alloc_slot = self.allocatable / self.SLOT_COUNT
+        self.log(f"alloc_slot = {alloc_slot} per lot")
+
+        new_portfolio = copy.deepcopy(self.portfolio)
+        if len(tickers_to_close) > 0:
+            self.log(f"Close positions: {tickers_to_close}")
+
+        occupied_slots = 0
+        # remove closed tickers
+        for ticker in list(new_portfolio['tickers'].keys()):
+            info = new_portfolio['tickers'][ticker]
+            if ticker in tickers_to_close:
+                del new_portfolio['tickers'][ticker]
+            else:
+                occupied_slots += 1
+
+        free_slots = self.SLOT_COUNT - occupied_slots
+        top_sorted = sorted(top, key=lambda x: abs(x['rsi'] - 50), reverse=True)[:free_slots]
+        free_slots -= len(top_sorted)
+
+        for item in top_sorted:
+            alloc = 0
+            entry = item['last_px']
+            lots = item['lots']
+            alloc = round(alloc_slot / entry / 10 * lots, 2)
+            if alloc >= 1:
+                value = self.floor2(entry * alloc)
+                alloc = -alloc
+                self.log(f"{item['ticker']}: px {entry}, {alloc}, val {value}, rsi {item['rsi']:.2f}, lots {lots}")
+                new_portfolio['tickers'][item['ticker']] = {
+                    'last_lot': item['lots'],
+                    'last_px': entry,
+                    'qty': alloc,
+                    'close': entry,
+                    'type': 'market'
+                }
+            else:
+                free_slots += 1
+
+        return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
+
+    def to_be_closed(self):
+        result = set()  # tickers for positions to be closed
+        for ticker, info in self.portfolio['tickers'].items():
+            d = self.data[ticker]
+            sma = self.compute_sma(d.close, 5)
+            if d.close.iloc[-1] < sma.iloc[-1]:
+                result.add(ticker)
+        return result
+
+    def get_tickers(self):
+        return ['VXX']
