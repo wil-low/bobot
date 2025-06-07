@@ -14,7 +14,8 @@ class AllocStrategy:
     def __init__(self, logger, key, portfolio, today, limit=253):
         self.key = key
         self.logger = logger
-        self.portfolio = portfolio
+        self.portfolio = portfolio[key]
+        self.leverage = portfolio['leverage']
         self.today = today
 
         self.log(f"========= init =========")
@@ -239,7 +240,7 @@ class AllocStrategy:
 class RisingAssets(AllocStrategy):
     # Rebalances monthly
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today)
+        super().__init__(logger, key, portfolio, today)
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
             self.reinvest = True
@@ -305,7 +306,7 @@ class RisingAssets(AllocStrategy):
 class DynamicTreasures(AllocStrategy):
     # Rebalances weekly
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today)
+        super().__init__(logger, key, portfolio, today)
         self.remains = self.tickers[-1]
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
@@ -369,7 +370,7 @@ class ETFAvalanches(AllocStrategy):
     SLOT_COUNT = 5
 
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today)
+        super().__init__(logger, key, portfolio, today)
         self.remains = self.tickers[-1]
 
     def allocate(self):
@@ -468,7 +469,7 @@ class MeanReversion(AllocStrategy):
     def __init__(self, logger, key, portfolio, today):
         self.long_trend_ticker = 'SPY'
         self.remains = 'SHY'
-        super().__init__(logger, key, portfolio[key], today)
+        super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
         self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
@@ -609,7 +610,7 @@ class CRSISP500(AllocStrategy):
     SLOT_COUNT = 15
 
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today, 110)
+        super().__init__(logger, key, portfolio, today, 110)
         self.params = {
             'crsi_setup': 10,  # The stock closes with ConnorsRSI(3, 2, 100) value less than W, where W is 5 or 10
             'percents_setup': 50,  # The stock closing price is in the bottom X % of the day's range, where X = 25, 50, 75 or 100
@@ -739,7 +740,7 @@ class TPS(AllocStrategy):
     SLOT_COUNT = 5
 
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today, 202)
+        super().__init__(logger, key, portfolio, today, 202)
         self.params = {
             'long_entry': 25,
             'long_exit': 70,
@@ -836,7 +837,7 @@ class VolPanics(AllocStrategy):
     SLOT_COUNT = 1
 
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio[key], today, 202)
+        super().__init__(logger, key, portfolio, today, 202)
 
     def allocate(self):
         tickers_to_close = self.to_be_closed()

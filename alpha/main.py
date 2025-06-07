@@ -73,7 +73,8 @@ def alpha_alloc(config, today, sync):
         print(broker.positions)
         sync = {
             "cash": broker.getcash(),
-            "equity": broker.getvalue()
+            "equity": broker.getvalue(),
+            "leverage": config['leverage']
         }
         for item in config['strategy']:
             sync[item['key']] = {
@@ -122,7 +123,8 @@ def alpha_alloc(config, today, sync):
             portfolio = {
                 'date': today,
                 'cash': cash,
-                'equity': cash
+                'equity': cash,
+                'leverage': config['leverage']
             }
             for item in config['strategy']:
                 item_cash = floor2(cash * item['percent'] / 100)
@@ -138,7 +140,8 @@ def alpha_alloc(config, today, sync):
         "transitions": {
             "text": f"Execute transitions at open {today}"
         },
-        "cash": 0
+        "cash": 0,
+        "leverage": config['leverage']
     }
  
     module = importlib.import_module("alloc")
