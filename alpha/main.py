@@ -100,6 +100,7 @@ def alpha_alloc(config, today, sync):
                     sync[key]['tickers'][ticker]['close'] = p['close']
                     logger.info(f"{prefix}: update CLOSE price")
                 if key == 'mr':
+                    #logger.info(f"{prefix}: check {ticker}")
                     if sync[key]['tickers'][ticker]['entry'] != p['entry']:
                         sync[key]['tickers'][ticker]['entry'] = p['entry']
                         logger.info(f"{prefix}: update ENTRY price")
@@ -137,9 +138,7 @@ def alpha_alloc(config, today, sync):
             save_portfolio(portfolio, f"{work_dir}/{today}.json")
 
     new_portfolio = {
-        "transitions": {
-            "text": f"Execute transitions at open {today}"
-        },
+        "transitions": {},
         "cash": 0,
         "leverage": config['leverage']
     }
@@ -153,6 +152,9 @@ def alpha_alloc(config, today, sync):
         new_portfolio[s.key], trans = s.allocate()
         if trans:
             new_portfolio["transitions"][s.key] = trans
+
+    if new_portfolio["transitions"]:
+        new_portfolio["transitions"]['text'] = f"Execute transitions at open {today}"
 
     #logger.info('new_portfolio: ' + json.dumps(new_portfolio, indent=4, sort_keys=True))
     compute_totals(new_portfolio, keys)

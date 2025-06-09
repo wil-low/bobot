@@ -73,12 +73,12 @@ class AllocStrategy:
         for ticker, info in self.portfolio['tickers'].items():
             close = self.data[ticker].close.iloc[-1]
             info['close'] = close
-            value = self.floor2(close * info['qty'])
+            value = self.floor2(abs(close * info['qty'] / self.leverage))
             equity += value
             self.log(f"   {ticker}, {close}, {info['qty']}, {value}")
         equity = self.floor2(equity)
         self.compute_cash(self.portfolio, equity)
-        self.allocatable = self.floor2(portfolio['equity'] * 0.98)  # reserve for fees
+        self.allocatable = self.floor2(self.portfolio['equity'] * 0.98 * self.leverage)  # reserve for fees
         self.log(f"equity={self.portfolio['equity']}, cash={self.portfolio['cash']}, allocatable={self.allocatable}")
 
     @staticmethod
@@ -223,7 +223,7 @@ class AllocStrategy:
         for ticker, info in portfolio['tickers'].items():
             close = info['close']  #self.data[ticker].close.iloc[-1]
             #info['close'] = close
-            value = self.floor2(close * info['qty'])
+            value = self.floor2(abs(close * info['qty'] / self.leverage))
             cash -= value
             #print(f"compute_eq: {ticker}, {close}, {info['qty']}, {value}")
         #print(f"compute_eq: cash={cash}\n")
@@ -689,7 +689,7 @@ class CRSISP500(AllocStrategy):
 
         # remains alloc
         close = self.data[self.remains].close.iloc[-1]
-        alloc = int(alloc_slot * free_slots / close / 5)  # leverage 1:4 vs 1:20 for stocks
+        alloc = int(alloc_slot * free_slots / close)
         if alloc >= 1:
             close = self.data[self.remains].close.iloc[-1]
             value = self.floor2(close * alloc)
@@ -731,7 +731,7 @@ class CRSISP500(AllocStrategy):
         cursor.execute(query)
         rows = cursor.fetchall()
         tickers = [row[0] for row in rows]
-        tickers.append('SHY')  # remains
+        tickers.append('SPY')  # remains
         return tickers
 
 
