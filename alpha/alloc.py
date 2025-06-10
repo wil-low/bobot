@@ -62,7 +62,7 @@ class AllocStrategy:
                 #close = self.data[ticker].close.iloc[-1]
                 #self.log(f"{ticker}: check expire: entry {entry}, open {open}, low {low}, high {high}, close {close}")
                 if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
-                    value = self.floor2(entry * qty)
+                    value = self.floor2(abs(entry * qty))
                     self.portfolio['cash'] += value
                     del self.portfolio['tickers'][ticker]
                     self.log(f"{ticker}: day order expired")
