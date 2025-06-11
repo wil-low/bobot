@@ -53,7 +53,6 @@ def dl_daily_summary(conn, ids, token, start_date):
     else:
         print(f"No rows for {start_date}")
 
-    time.sleep(13)  # 5 API Calls / Minute
     return count
 
 def load_ticker_info():
@@ -115,6 +114,7 @@ if __name__ == '__main__':
             if current.weekday() < 5:  # 0 = Monday, 6 = Sunday → skip Saturday (5), Sunday (6)
                 print(f"Download for {date_str}")
                 dl_daily_summary(conn, ids, token, date_str)
+                time.sleep(13)  # 5 API Calls / Minute
             else:
                 print(f"Skip weekend {date_str}")
             current -= timedelta(days=1)
