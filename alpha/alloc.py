@@ -550,6 +550,7 @@ class MeanReversion(AllocStrategy):
             new_portfolio['tickers'][self.remains] = {
                 '-remains': True,
                 'qty': alloc,
+                'entry': close,
                 'close': close,
                 'type': 'market'
             }
@@ -572,7 +573,10 @@ class MeanReversion(AllocStrategy):
                     #self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
                         result.add(ticker)
-                if info['close'] / info['entry'] < (100 - self.STOP_SIZE) / 100:  # the current price is more than 10% below the entry price
+                stop_px = info['entry'] * (100 - self.STOP_SIZE) / 100  # the current price is more than STOP_SIZE% below the entry price
+                low = d.low.iloc[-1]
+                high = d.high.iloc[-1]
+                if low < stop_px:  # stop order triggered
                     result.add(ticker)
         return result
 

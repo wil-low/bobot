@@ -90,20 +90,22 @@ def alpha_alloc(config, today, sync):
             for ticker, info in portfolio[key]['tickers'].items():
                 p = broker.positions.get(ticker, None)
                 prefix = "%2s - %-6s" % (key, ticker)
-                if p is None and info['type'] == 'limit':
-                    # limit day order was not filled
-                    sync[key]['cash'] += floor2(info['qty'] * info['close'])
-                    logger.info(f"{prefix}: REMOVE limit order")
-                    continue
-                sync[key]['tickers'][ticker] = info
-                if sync[key]['tickers'][ticker]['close'] != p['close']:
-                    sync[key]['tickers'][ticker]['close'] = p['close']
-                    logger.info(f"{prefix}: update CLOSE price")
-                if key == 'mr':
-                    #logger.info(f"{prefix}: check {ticker}")
-                    if sync[key]['tickers'][ticker]['entry'] != p['entry']:
-                        sync[key]['tickers'][ticker]['entry'] = p['entry']
-                        logger.info(f"{prefix}: update ENTRY price")
+                if p is None:
+                    if info['type'] == 'limit':
+                        # limit day order was not filled
+                        sync[key]['cash'] += floor2(info['qty'] * info['close'])
+                        logger.info(f"{prefix}: REMOVE limit order")
+                        continue
+                else:
+                    sync[key]['tickers'][ticker] = info
+                    if sync[key]['tickers'][ticker]['close'] != p['close']:
+                        sync[key]['tickers'][ticker]['close'] = p['close']
+                        logger.info(f"{prefix}: update CLOSE price")
+                    if key == 'mr':
+                        logger.info(f"{prefix}: check {ticker}")
+                        if sync[key]['tickers'][ticker]['entry'] != p['entry']:
+                            sync[key]['tickers'][ticker]['entry'] = p['entry']
+                            logger.info(f"{prefix}: update ENTRY price")
 
         #compute_totals(sync, keys)
         fn = f"{work_dir}/sync_{today}.json"
