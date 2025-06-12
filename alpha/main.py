@@ -46,6 +46,8 @@ def next_working_day(today):
     return next_date_str
 
 def alpha_alloc(config, today, sync):
+    if today is None:
+        today = datetime.now().strftime('%Y-%m-%d')
     d = datetime.strptime(today, '%Y-%m-%d')
     logger.info(f"Alpha System start: {today}, weekday={d.weekday()}")
 
@@ -173,7 +175,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", required=True, help='config file name')
-    parser.add_argument("--date", "-d", required=True, help='date in format YYYY-MM-DD')
+    parser.add_argument("--date", "-d", help='date in format YYYY-MM-DD')
     parser.add_argument("--action", "-a", required=True, choices=['sync', 'next'], help="sync positions with broker or calculate next day")
     args = parser.parse_args()
 
