@@ -368,6 +368,7 @@ class DynamicTreasures(AllocStrategy):
 class ETFAvalanches(AllocStrategy):
     # Rebalances daily
     SLOT_COUNT = 5
+    ENTRY_DELTA = 1.5  # put a sell limit order ENTRY_DELTA% above the current price
 
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today)
@@ -388,7 +389,7 @@ class ETFAvalanches(AllocStrategy):
                         #print(f"{ticker}: rsi {rsi}")
                         if rsi.iloc[-1] > 70:
                             #print(f"{ticker}: rsi {rsi}")
-                            entry = self.floor2(d.close.iloc[-1] * 1.03)  # put a sell limit order 3.0% above the current price
+                            entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
                             daily_return = d.close / d.close.shift(1)
                             volatility = daily_return.rolling(window=100).std()
                             top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
