@@ -5,6 +5,8 @@ import collections
 import backtrader as bt
 from datetime import datetime, timezone
 
+from notifier import TgNotifier
+
 
 class BobotBrokerBase(bt.broker.BrokerBase):
     def log(self, txt, dt=None):
@@ -23,10 +25,11 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         self.trades_offset = 0
         self.trades_limit = 50
         self.positions = {}
-        self.bot_token = bot_token
-        self.channel_id = channel_id
         self.ws = None
         self.notifs = collections.deque()
+        self.notifier = None
+        if bot_token is not None and channel_id is not None:
+            self.notifier = TgNotifier(bot_token, channel_id)
 
     def ready(self):
         return self.is_ready;
@@ -39,13 +42,16 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         return None
 
     def post_message(self, message):
-        if self.bot_token is not None and self.channel_id is not None:
-            url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
-            payload = {
-                'chat_id': self.channel_id,
-                'text': message,
-                'disable_notification': True,
-                'disable_web_page_preview': True
-            }
-            response = requests.post(url, data=payload)
-            self.log(f"post_message: {response.json()}")
+        if self.notifier:
+            response = self.notifier.post_message(message)
+            self.log(f"post_message: {response}")
+
+    def register_ticker(self, ticker):
+        ''' Register available tickers from a strategy, to compose batched messages '''
+        if self.notifier:
+            self.notifier.register_ticker(ticker)
+
+    def add_message(self, ticker, timestamp, message):
+        ''' Add message to a batch, send only when all tickers have updated the timestamp '''
+        if self.notifier:
+            self.notifier.add_message(ticker, timestamp, message)
