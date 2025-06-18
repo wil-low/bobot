@@ -742,6 +742,7 @@ class TPS(bt.Strategy):
         ('long_exit', 70),
         ('short_entry', 75),
         ('short_exit', 30),
+        ('atr_multiplier', 0.5),
         ('logger', None),
     )
 
@@ -839,7 +840,7 @@ class TPS(bt.Strategy):
             
             self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
 
-            level = self.atr[d].atr[-1] / 2
+            level = self.atr[d].atr[0] * self.params.atr_multiplier
             p = self.getposition(d)
             if p is None or p.size == 0:
                 # no position
@@ -853,10 +854,10 @@ class TPS(bt.Strategy):
                             self.log(d, "SIGNAL BUY")
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")
-                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   BUY  ⬆️  , rsi={self.rsi[d].rsi[0]:.2f}, sma200={self.sma[d].sma[0]:.4f}"
+                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   BUY  ⬆️  , rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\nentry at {d.close[0]:.5f}"
                             for i in range(1, 4):
-                                message += f"\nx{i + 1} at {(d.close[0] - level * i):.3f}"
-                            message += f"\nStop at {(d.close[0] - level * 4):.3f}"
+                                message += f"\nx{i + 1} at {(d.close[0] - level * i):.5f}"
+                            message += f"\nStop at {(d.close[0] - level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
                             self.log(d, message)
                             self.broker.post_message(message)
 
@@ -869,10 +870,10 @@ class TPS(bt.Strategy):
                             self.log(d, "SIGNAL SELL")
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")
-                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   SELL ⬇️  , rsi={self.rsi[d].rsi[0]:.2f}, sma200={self.sma[d].sma[0]:.4f}"
+                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   SELL ⬇️  , rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\nentry at {d.close[0]:.5f}"
                             for i in range(1, 4):
-                                message += f"\nx{i + 1} at {(d.close[0] + level * i):.3f}"
-                            message += f"\nStop at {(d.close[0] + level * 4):.3f}"
+                                message += f"\nx{i + 1} at {(d.close[0] + level * i):.5f}"
+                            message += f"\nStop at {(d.close[0] + level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
                             self.log(d, message)
                             self.broker.post_message(message)
                 elif self.params.trade['send_signals']:

@@ -14,9 +14,10 @@ class BybitLiveData(BobotLiveDataBase):
     BASE_URL = "https://api.bybit.com"
     CANDLESTICK_ENDPOINT = "/v5/market/kline"
 
-    def __init__(self, logger, symbol, granularity, history_size):
+    def __init__(self, logger, symbol, granularity, history_size, use_ws):
         super().__init__(logger, symbol, granularity, history_size)
         self.bar = None
+        self.use_ws = use_ws
         print("BybitLive init")
 
     def start(self):
@@ -101,7 +102,9 @@ class BybitLiveData(BobotLiveDataBase):
 
         self.log(f"Historical candles: {len(data['result']['list'])}")
 
-        for candle in reversed(data['result']['list'][1:]):  # skip latest candle
+        candles = list(reversed(data['result']['list'][1:]))  # skip latest candle
+        for i in range(len(candles)):
+            candle = candles[i]
             ts = int(candle[0])
             c = {
                 "epoch": int(ts / 1000),
@@ -109,7 +112,7 @@ class BybitLiveData(BobotLiveDataBase):
                 "high": float(candle[2]),
                 "low": float(candle[3]),
                 "close": float(candle[4]),
-                "volume": 0 #float(candle[5]),
+                "volume": float(candle[5]) if not self.use_ws and (i == len(candles) - 1) else 0,
             }
             self.last_epoch = c['epoch']
             self.ohlc['close'] = c['close']
@@ -117,8 +120,9 @@ class BybitLiveData(BobotLiveDataBase):
             self.md.put(c)
         self.last_epoch += self.granularity * 60
         self.log(f"last_epoch: {self.last_epoch}")
-        self.reset_ohlc()
-        self._start_ws()
+        if self.use_ws:
+            self.reset_ohlc()
+            self._start_ws()
 
     def _start_ws(self):
         def on_open(ws):

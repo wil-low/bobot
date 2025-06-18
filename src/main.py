@@ -56,7 +56,7 @@ def run_bot():
             elif config['feed']['provider'] == "OKX":
                 data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
             elif config['feed']['provider'] == "Bybit":
-                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'])
+                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'], use_ws=False)
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
