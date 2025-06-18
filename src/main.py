@@ -82,6 +82,7 @@ def run_bot():
             api_key=config['auth']['api_key'],
             api_secret=config['auth']['api_secret'],
             api_passphrase=config['auth']['api_passphrase'],
+            contract_expiration_min=config['trade']['expiration_min']
         )
     cerebro.setbroker(broker)
 

@@ -6,7 +6,7 @@ from broker.broker import BobotBrokerBase
 
 class BinaryOptionsBroker(BobotBrokerBase):
     def __init__(self, logger, bot_token, channel_id, payout=1.8, stake=10, cash=10000, contract_expiration_min = 15, csv_file="analysis/csv/deriv_backtest.csv"):
-        super().__init__(logger, bot_token, channel_id)
+        super().__init__(logger, contract_expiration_min, bot_token, channel_id)
         self.order_id = 1
         self.payout = payout
         self.stake = stake

@@ -772,6 +772,7 @@ class TPS(bt.Strategy):
             self.pos_stage[d] = 0
             self.last_entry_price[d] = None
             self.lot_size[d] = None
+            self.broker.register_ticker(d.ticker)
 
         if self.params.trade['send_signals']:
             self.broker.post_message(f"{self.__class__.__name__} started")
@@ -839,7 +840,7 @@ class TPS(bt.Strategy):
                 self.log(d, f"Lot size = {self.lot_size[d]}")
             
             self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
-
+            # {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n
             level = self.atr[d].atr[0] * self.params.atr_multiplier
             p = self.getposition(d)
             if p is None or p.size == 0:
@@ -853,13 +854,14 @@ class TPS(bt.Strategy):
                         else:
                             self.log(d, "SIGNAL BUY")
                         if self.params.trade['send_signals']:
-                            self.log(d, f"Close={d.close[0]}, level={level}")
-                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   BUY  ⬆️  , rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\nentry at {d.close[0]:.5f}"
+                            self.log(d, f"Close={d.close[0]}, level={level}")                       
+                            message = f"<b>{d.ticker}</b>:   BUY  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
                             for i in range(1, 4):
-                                message += f"\nx{i + 1} at {(d.close[0] - level * i):.5f}"
-                            message += f"\nStop at {(d.close[0] - level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
+                                message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
+                            message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
                             self.log(d, message)
-                            self.broker.post_message(message)
+                            self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
+                            #self.broker.post_message(message)
 
                 elif d.close[0] < self.sma[d].sma[0] and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry:
                         # 2 periods above, go short
@@ -870,16 +872,18 @@ class TPS(bt.Strategy):
                             self.log(d, "SIGNAL SELL")
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")
-                            message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker},   SELL ⬇️  , rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\nentry at {d.close[0]:.5f}"
+                            message = f"<b>{d.ticker}</b>:   SELL ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
                             for i in range(1, 4):
-                                message += f"\nx{i + 1} at {(d.close[0] + level * i):.5f}"
-                            message += f"\nStop at {(d.close[0] + level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
+                                message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
+                            message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
                             self.log(d, message)
-                            self.broker.post_message(message)
+                            self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
+                            #self.broker.post_message(message)
                 elif self.params.trade['send_signals']:
                     sign = '⚠️' if self.rsi[d].rsi[0] > self.params.long_exit or self.rsi[d].rsi[0] < self.params.short_exit else ' '
-                    message = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n{d.ticker}, check position, rsi={self.rsi[d].rsi[0]:.2f} {sign}"
-                    self.broker.post_message(message)
+                    message = f"<b>{d.ticker}</b>: check position, rsi={self.rsi[d].rsi[0]:.2f} {sign}"
+                    self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
+                    #self.broker.post_message(message)
 
             else:
                 if p.size > 0:

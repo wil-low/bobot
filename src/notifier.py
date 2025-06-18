@@ -2,7 +2,8 @@ from datetime import datetime
 import requests
 
 class TgNotifier:
-    def __init__(self, bot_token, channel_id):
+    def __init__(self, logger, bot_token, channel_id):
+        self.logger = logger
         self.bot_token = bot_token
         self.channel_id = channel_id
         self.last_sent_timestamp = None
@@ -16,26 +17,29 @@ class TgNotifier:
         payload = {
             'chat_id': self.channel_id,
             'text': text,
+            'parse_mode': 'HTML', #'MarkdownV2',
             'disable_notification': True,
             'disable_web_page_preview': True
         }
         response = requests.post(url, data=payload)
-        return response.json()
+        json = response.json()
+        if not json['ok']:
+            self.logger.error(json)
 
     def register_ticker(self, ticker):
         ''' Register available tickers from a strategy, to compose batched messages '''
         if not ticker in self.tickers:
             self.tickers[ticker] = None
 
-    def add_message(self, ticker, timestamp, message):
+    def add_message(self, ticker, timestamp, tf, message):
         ''' Add message to a batch, send only when all tickers have updated the timestamp '''
         if ticker in self.tickers:
             self.tickers[ticker] = timestamp
             self.messages[ticker] = message
-            if self.last_sent_timestamp != timestamp and all(self.tickers, lambda t: self.tickers[t] == timestamp):
-                message = ''
+            if self.last_sent_timestamp != timestamp and all(self.tickers[t] == timestamp for t in self.tickers):
+                message = f"{timestamp.isoformat()} ({tf} min)"
                 for k in sorted(self.tickers.keys()):
-                    message += f"\n{self.messages[k]}"
+                    message += f"\n\n{self.messages[k]}"
                 self.post_message(message)
                 self.last_sent_timestamp = timestamp
         else:

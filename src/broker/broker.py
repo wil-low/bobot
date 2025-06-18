@@ -17,9 +17,10 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, bot_token, channel_id):
+    def __init__(self, logger, timeframe, bot_token, channel_id):
         super().__init__()
         self.logger = logger
+        self.timeframe = timeframe
         self.is_ready = False
         self.trades = []
         self.trades_offset = 0
@@ -29,7 +30,7 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         self.notifs = collections.deque()
         self.notifier = None
         if bot_token is not None and channel_id is not None:
-            self.notifier = TgNotifier(bot_token, channel_id)
+            self.notifier = TgNotifier(logger, bot_token, channel_id)
 
     def ready(self):
         return self.is_ready;
@@ -54,4 +55,4 @@ class BobotBrokerBase(bt.broker.BrokerBase):
     def add_message(self, ticker, timestamp, message):
         ''' Add message to a batch, send only when all tickers have updated the timestamp '''
         if self.notifier:
-            self.notifier.add_message(ticker, timestamp, message)
+            self.notifier.add_message(ticker, timestamp, self.timeframe, message)

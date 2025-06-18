@@ -15,8 +15,8 @@ from broker.broker import BobotBrokerBase
 
 
 class OKXBroker(BobotBrokerBase):
-    def __init__(self, logger, bot_token, channel_id, api_key, api_secret, api_passphrase):
-        super().__init__(logger, bot_token, channel_id)
+    def __init__(self, logger, contract_expiration_min, bot_token, channel_id, api_key, api_secret, api_passphrase):
+        super().__init__(logger, contract_expiration_min, bot_token, channel_id)
         self.cash = 10000.0  # initial virtual balance
         self.HEADERS = {
             'OK-ACCESS-KEY': api_key,
