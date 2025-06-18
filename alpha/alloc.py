@@ -75,7 +75,7 @@ class AllocStrategy:
             info['close'] = close
             value = self.floor2(abs(close * info['qty'] / self.leverage))
             equity += value
-            self.log(f"   {ticker}, {close}, {info['qty']}, {value}")
+            self.log(f"   {ticker}: {close} * {info['qty']} = {value}")
         equity = self.floor2(equity)
         self.compute_cash(self.portfolio, equity)
         self.allocatable = self.floor2(self.portfolio['equity'] * 0.98 * self.leverage)  # reserve for fees
@@ -327,7 +327,7 @@ class DynamicTreasures(AllocStrategy):
                         #print(f"sc_{n}: {sc}: {d.close.iloc[-1]} / {d.close.iloc[-21 * n - 1]}")
                         if sc:
                             score += 5  # % allocation
-                    #print(f"{ticker}: {score}")
+                    self.log(f"{ticker}: score={score}")
                     top.append({'ticker': ticker, 'score': score})
             
             new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
@@ -571,7 +571,7 @@ class MeanReversion(AllocStrategy):
                     weekly_series = d.close.resample('W').last()
                     #print(weekly_series)
                     rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
-                    #self.log(f"{ticker}: weekly rsi={rsi}")
+                    self.log(f"{ticker}: weekly rsi={rsi}")
                     if rsi > 80:
                         result.add(ticker)
                 stop_px = info['entry'] * (100 - self.STOP_SIZE) / 100  # the current price is more than STOP_SIZE% below the entry price

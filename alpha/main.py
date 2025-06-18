@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+import glob
 import importlib
 from loguru import logger  # pip install loguru
 
@@ -46,18 +47,25 @@ def next_working_day(today):
     return next_date_str
 
 def alpha_alloc(config, today, sync):
+    work_dir = f"work/portfolio/{config['subdir']}"
     if today is None:
-        today = datetime.now().strftime('%Y-%m-%d')
+        # find latest portfolio json
+        path = sorted(glob.glob(f"{work_dir}/[0-9]*.json"))[-1]
+        print(path)
+        filename = os.path.basename(path)
+        today = os.path.splitext(filename)[0]
+        #today = datetime.now().strftime('%Y-%m-%d')
     d = datetime.strptime(today, '%Y-%m-%d')
+    print(f"Alpha System start: {today}, weekday={d.weekday()}")
     logger.info(f"Alpha System start: {today}, weekday={d.weekday()}")
 
     if d.weekday() >= 5:
-        print(f"{today} is a weekend, exiting")
-        logger.error(f"{today} is a weekend, exiting")
-        next_working_day(today)
-        exit(1)
+        print(f"{today} is a weekend")
+        logger.warning(f"{today} is a weekend")
+        today = next_working_day(today)
+        alpha_alloc(config, today, sync)
+        return
 
-    work_dir = f"work/portfolio/{config['subdir']}"
     os.makedirs(work_dir, exist_ok=True)
     portfolio = None
 
