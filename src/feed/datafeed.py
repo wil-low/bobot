@@ -95,7 +95,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         self.last_ts = 0
         self.ws = None
         self.thread = None
-        print("LiveDataBase init")
+        #print("BobotLiveDataBase init")
 
     def islive(self):
         return True

@@ -18,11 +18,11 @@ class BybitLiveData(BobotLiveDataBase):
         super().__init__(logger, symbol, granularity, history_size)
         self.bar = None
         self.use_ws = use_ws
-        print("BybitLive init")
+        #print("BybitLive init")
 
     def start(self):
         super().start()
-        print(f"BybitLive start {self.ticker} {self.bar}")
+        #print(f"BybitLive start {self.ticker} {self.bar}")
         self.fetch_history()
 
     def fetch_candles(self, start_time, end_time):
