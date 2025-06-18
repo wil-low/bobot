@@ -855,7 +855,7 @@ class TPS(bt.Strategy):
                             self.log(d, "SIGNAL BUY")
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")                       
-                            message = f"<b>{d.ticker}</b>:   BUY  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
+                            message = f"<b>{d.ticker}</b>:   LONG  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
                             qty = 1
                             value = d.close[0]
                             for i in range(1, 4):
@@ -877,7 +877,7 @@ class TPS(bt.Strategy):
                             self.log(d, "SIGNAL SELL")
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")
-                            message = f"<b>{d.ticker}</b>:   SELL ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
+                            message = f"<b>{d.ticker}</b>:   SHORT ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
                             qty = 1
                             value = d.close[0]
                             for i in range(1, 4):
