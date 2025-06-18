@@ -856,9 +856,14 @@ class TPS(bt.Strategy):
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")                       
                             message = f"<b>{d.ticker}</b>:   BUY  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
+                            qty = 1
+                            value = d.close[0]
                             for i in range(1, 4):
+                                value += (d.close[0] - level * i) * (i + 1)
+                                qty += i + 1
                                 message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
-                            message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
+                            value -= (d.close[0] - level * 4) * qty
+                            message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.2f})"
                             self.log(d, message)
                             self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                             #self.broker.post_message(message)
@@ -873,9 +878,14 @@ class TPS(bt.Strategy):
                         if self.params.trade['send_signals']:
                             self.log(d, f"Close={d.close[0]}, level={level}")
                             message = f"<b>{d.ticker}</b>:   SELL ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}\n    entry at {d.close[0]:.5f}"
+                            qty = 1
+                            value = d.close[0]
                             for i in range(1, 4):
+                                value += (d.close[0] + level * i) * (i + 1)
+                                qty += i + 1
                                 message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
-                            message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${(level * 4 * 10):.2f})"
+                            value = (d.close[0] + level * 4) * qty - value
+                            message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.2f})"
                             self.log(d, message)
                             self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                             #self.broker.post_message(message)
