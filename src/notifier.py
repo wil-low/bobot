@@ -39,7 +39,8 @@ class TgNotifier:
             if self.last_sent_timestamp != timestamp and all(self.tickers[t] == timestamp for t in self.tickers):
                 message = f"{timestamp.isoformat()} ({tf} min)"
                 for k in sorted(self.tickers.keys()):
-                    message += f"\n\n{self.messages[k]}"
+                    if self.messages[k] is not None: 
+                        message += f"\n\n{self.messages[k]}"
                 self.post_message(message)
                 self.last_sent_timestamp = timestamp
         else:

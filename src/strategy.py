@@ -890,8 +890,9 @@ class TPS(bt.Strategy):
                             self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                             #self.broker.post_message(message)
                 elif self.params.trade['send_signals']:
-                    sign = '⚠️' if self.rsi[d].rsi[0] > self.params.long_exit or self.rsi[d].rsi[0] < self.params.short_exit else ' '
-                    message = f"<b>{d.ticker}</b>: check position, rsi={self.rsi[d].rsi[0]:.2f} {sign}"
+                    message = None
+                    if self.rsi[d].rsi[0] > self.params.long_exit or self.rsi[d].rsi[0] < self.params.short_exit:
+                        message = f"<b>{d.ticker}</b>: close, rsi={self.rsi[d].rsi[0]:.2f}"
                     self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                     #self.broker.post_message(message)
 
