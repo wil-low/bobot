@@ -844,6 +844,7 @@ class TPS(bt.Strategy):
             level = self.atr[d].atr[0] * self.params.atr_multiplier
             p = self.getposition(d)
             above_sma = d.close[0] > self.sma[d].sma[0]
+            atr_percent = self.atr[d].atr[0] / d.close[0] * 100
             if p is None or p.size == 0:
                 # no position
                 self.pos_stage[d] = 1
@@ -857,7 +858,7 @@ class TPS(bt.Strategy):
                         self.log(d, "SIGNAL BUY")
                     if self.params.trade['send_signals']:
                         self.log(d, f"Close={d.close[0]}, level={level}")                       
-                        message = f"<b>{d.ticker}</b>:   LONG  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
+                        message = f"<b>{d.ticker}</b>:   LONG  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f} ({atr_percent:.2f}%), {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
                         qty = 1
                         value = d.close[0]
                         for i in range(1, 4):
@@ -878,7 +879,7 @@ class TPS(bt.Strategy):
                         self.log(d, "SIGNAL SELL")
                     if self.params.trade['send_signals']:
                         self.log(d, f"Close={d.close[0]}, level={level}")
-                        message = f"<b>{d.ticker}</b>:   SHORT ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
+                        message = f"<b>{d.ticker}</b>:   SHORT ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f} ({atr_percent:.2f}%), {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
                         qty = 1
                         value = d.close[0]
                         for i in range(1, 4):
