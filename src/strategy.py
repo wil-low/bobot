@@ -847,50 +847,48 @@ class TPS(bt.Strategy):
                 # no position
                 self.pos_stage[d] = 1
                 levels_from_sma = abs(d.close[0] - self.sma[d].sma[0]) / level
-                if d.close[0] > self.sma[d].sma[0] and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry:
-                        if levels_from_sma > 4:
-                            # 2 periods below, go long
-                            if self.params.trade['send_orders']:
-                                self.submit_buy(d, self.pos_stage[d], 'CREATE')
-                                self.pos_stage[d] += 1
-                            else:
-                                self.log(d, "SIGNAL BUY")
-                            if self.params.trade['send_signals']:
-                                self.log(d, f"Close={d.close[0]}, level={level}")                       
-                                message = f"<b>{d.ticker}</b>:   LONG  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
-                                qty = 1
-                                value = d.close[0]
-                                for i in range(1, 4):
-                                    value += (d.close[0] - level * i) * (i + 1)
-                                    qty += i + 1
-                                    message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
-                                value -= (d.close[0] - level * 4) * qty
-                                message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.6f})"
-                                self.log(d, message)
-                                self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
-                                #self.broker.post_message(message)
-                elif d.close[0] < self.sma[d].sma[0] and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry:
-                        if levels_from_sma > 4:
-                            # 2 periods above, go short
-                            if self.params.trade['send_orders']:
-                                self.submit_sell(d, self.pos_stage[d], 'CREATE')
-                                self.pos_stage[d] += 1
-                            else:
-                                self.log(d, "SIGNAL SELL")
-                            if self.params.trade['send_signals']:
-                                self.log(d, f"Close={d.close[0]}, level={level}")
-                                message = f"<b>{d.ticker}</b>:   SHORT ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
-                                qty = 1
-                                value = d.close[0]
-                                for i in range(1, 4):
-                                    value += (d.close[0] + level * i) * (i + 1)
-                                    qty += i + 1
-                                    message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
-                                value = (d.close[0] + level * 4) * qty - value
-                                message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.6f})"
-                                self.log(d, message)
-                                self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
-                                #self.broker.post_message(message)
+                if d.close[0] > self.sma[d].sma[0] and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels_from_sma > 4:
+                    # 2 periods below, go long
+                    if self.params.trade['send_orders']:
+                        self.submit_buy(d, self.pos_stage[d], 'CREATE')
+                        self.pos_stage[d] += 1
+                    else:
+                        self.log(d, "SIGNAL BUY")
+                    if self.params.trade['send_signals']:
+                        self.log(d, f"Close={d.close[0]}, level={level}")                       
+                        message = f"<b>{d.ticker}</b>:   LONG  ⬆️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
+                        qty = 1
+                        value = d.close[0]
+                        for i in range(1, 4):
+                            value += (d.close[0] - level * i) * (i + 1)
+                            qty += i + 1
+                            message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
+                        value -= (d.close[0] - level * 4) * qty
+                        message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.6f})"
+                        self.log(d, message)
+                        self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
+                        #self.broker.post_message(message)
+                elif d.close[0] < self.sma[d].sma[0] and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels_from_sma > 4:
+                    # 2 periods above, go short
+                    if self.params.trade['send_orders']:
+                        self.submit_sell(d, self.pos_stage[d], 'CREATE')
+                        self.pos_stage[d] += 1
+                    else:
+                        self.log(d, "SIGNAL SELL")
+                    if self.params.trade['send_signals']:
+                        self.log(d, f"Close={d.close[0]}, level={level}")
+                        message = f"<b>{d.ticker}</b>:   SHORT ⬇️, rsi={self.rsi[d].rsi[0]:.1f}, atr={self.atr[d].atr[0]:.5f}, {levels_from_sma:.2f} from sma\n    entry at {d.close[0]:.5f}"
+                        qty = 1
+                        value = d.close[0]
+                        for i in range(1, 4):
+                            value += (d.close[0] + level * i) * (i + 1)
+                            qty += i + 1
+                            message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
+                        value = (d.close[0] + level * 4) * qty - value
+                        message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.6f})"
+                        self.log(d, message)
+                        self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
+                        #self.broker.post_message(message)
                 elif self.params.trade['send_signals']:
                     message = None
                     if self.rsi[d].rsi[0] > self.params.long_exit or self.rsi[d].rsi[0] < self.params.short_exit:
