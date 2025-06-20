@@ -129,9 +129,8 @@ if __name__ == '__main__':
                 print(f"Download for {date_str}")
                 if dl_daily_summary(conn, ids, token, date_str) > 0:
                     break
+                time.sleep(13)  # 5 API Calls / Minute
             else:
                 print(f"Skip weekend {date_str}")
 
-    print("All data imported successfully.")
     conn.close()
-
