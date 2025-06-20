@@ -743,6 +743,7 @@ class TPS(bt.Strategy):
         ('short_entry', 75),
         ('short_exit', 30),
         ('atr_multiplier', 0.5),
+        ('max_loss', 50),  # in USD
         ('logger', None),
     )
 
@@ -864,11 +865,12 @@ class TPS(bt.Strategy):
                         for i in range(1, 4):
                             value += (d.close[0] - level * i) * (i + 1)
                             qty += i + 1
-                            message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
+                            message += f"\n    x{i + 1}    at {(d.close[0] - level * i):.5f}"
                         value -= (d.close[0] - level * 4) * qty
                         if d.ticker.find('USD') == 0:  # reversed quote
                             value /= d.close[0]
-                        message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.6f})"
+                        qty = self.params.max_loss / value
+                        message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.6f}; qty <u>{qty:.3f}</u> for ${self.params.max_loss} loss)"
                         self.log(d, message)
                         self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                         #self.broker.post_message(message)
@@ -887,11 +889,12 @@ class TPS(bt.Strategy):
                         for i in range(1, 4):
                             value += (d.close[0] + level * i) * (i + 1)
                             qty += i + 1
-                            message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
+                            message += f"\n    x{i + 1}    at {(d.close[0] + level * i):.5f}"
                         value = (d.close[0] + level * 4) * qty - value
                         if d.ticker.find('USD') == 0:  # reversed quote
                             value /= d.close[0]
-                        message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.6f})"
+                        qty = self.params.max_loss / value
+                        message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.6f}; qty <u>{qty:.3f}</u> for ${self.params.max_loss} loss)"
                         self.log(d, message)
                         self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                         #self.broker.post_message(message)
