@@ -866,6 +866,8 @@ class TPS(bt.Strategy):
                             qty += i + 1
                             message += f"\n    x{i + 1} at {(d.close[0] - level * i):.5f}"
                         value -= (d.close[0] - level * 4) * qty
+                        if d.ticker.find('USD') == 0:  # reversed quote
+                            value /= d.close[0]
                         message += f"\n    stop at {(d.close[0] - level * 4):.5f} (loss ${value:.6f})"
                         self.log(d, message)
                         self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
@@ -887,6 +889,8 @@ class TPS(bt.Strategy):
                             qty += i + 1
                             message += f"\n    x{i + 1} at {(d.close[0] + level * i):.5f}"
                         value = (d.close[0] + level * 4) * qty - value
+                        if d.ticker.find('USD') == 0:  # reversed quote
+                            value /= d.close[0]
                         message += f"\n    stop at {(d.close[0] + level * 4):.5f} (loss ${value:.6f})"
                         self.log(d, message)
                         self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
@@ -894,7 +898,7 @@ class TPS(bt.Strategy):
                 elif self.params.trade['send_signals']:
                     message = None
                     if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
-                        message = f"<b>{d.ticker}</b>: close, rsi={self.rsi[d].rsi[0]:.2f}"
+                        message = f"<b>{d.ticker}</b>: close & cancel, rsi={self.rsi[d].rsi[0]:.2f}"
                     self.broker.add_message(d.ticker, d.datetime.datetime(0), message)
                     #self.broker.post_message(message)
 
