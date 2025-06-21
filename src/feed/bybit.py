@@ -116,7 +116,7 @@ class BybitLiveData(BobotLiveDataBase):
             }
             self.last_epoch = c['epoch']
             self.ohlc['close'] = c['close']
-            self.log(f"Hist bar queued for epoch: {self.last_epoch}")
+            #self.log(f"Hist bar queued for epoch: {self.last_epoch}")
             self.md.put(c)
         self.last_epoch += self.granularity * 60
         self.log(f"last_epoch: {self.last_epoch}")
