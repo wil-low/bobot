@@ -12,7 +12,8 @@ class TgNotifier:
 
     def post_message(self, message):
         text = message
-        #print(f"post_message:\n{text}")
+        #self.logger.debug(f"post_message:\n{text}")
+        #return
         url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
         payload = {
             'chat_id': self.channel_id,

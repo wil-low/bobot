@@ -923,14 +923,20 @@ class TPS(bt.Strategy):
             self.messages[index][ticker] = message
             #self.log(action.data, f">>{index}, {timestamp}, last {self.last_sent_timestamp}: {message}")
             if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
+                part_num = 0
                 for i, m in enumerate(self.messages):
-                    post = f"{self.POST_HEADERS[i]}\n"  #f"{timestamp.isoformat()} ({tf} min)"
+                    part_num += 1
+                    post = f"#{part_num} {self.POST_HEADERS[i]}\n"
                     for k in sorted(self.ticker_timestamps.keys()):
                         message = m.get(k, None)
                         if message is not None: 
                             post += f"\n{m[k]}"
-                    self.broker.post_message(post)
-                    #self.log(None, f"{i} => \n{post}")
+                        if len(post) > 2048:
+                            self.broker.post_message(post)
+                            part_num += 1
+                            post = f"#{part_num} {self.POST_HEADERS[i]}\n"
+                    if len(post) > 0:
+                        self.broker.post_message(post)
                 self.last_sent_timestamp = timestamp
                 self.messages = [{}, {}]
 

@@ -45,7 +45,7 @@ class BobotBrokerBase(bt.broker.BrokerBase):
     def post_message(self, message):
         if self.notifier:
             response = self.notifier.post_message(message)
-            self.log(f"post_message: {response}")
+            #self.log(f"post_message: {response}")
 
     def register_ticker(self, ticker):
         ''' Register available tickers from a strategy, to compose batched messages '''
