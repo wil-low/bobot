@@ -739,6 +739,10 @@ class TPSAction:
     SHORT = -1
     CLOSE = 0
 
+    FOREX_MODE = False
+    MAX_LOSS = None  # in USD
+    usd_rates = {}  # ticker: USD exchange rate of a currency xxx
+
     def __init__(self, data, action=None, rsi=None, atr=None, level=None, levels2sma=None):
         self.data = data
         self.action = action
@@ -746,6 +750,7 @@ class TPSAction:
         self.atr = atr
         self.level = level
         self.levels2sma = levels2sma
+        self.stop_diff = None
 
     def set_entry(self, price, size):
         self.entry_price = price
@@ -753,15 +758,47 @@ class TPSAction:
         self.volatility = self.atr / self.entry_price * 100
         self.orders = []
 
-    def set_stop_loss(self, price, loss_per_lot, qty_for_max_loss):
+    def set_stop_loss(self, price, stop_diff):
         self.stop_price = price
-        self.loss_per_lot = loss_per_lot
-        self.qty_for_max_loss = qty_for_max_loss
+        self.stop_diff = stop_diff
+
+    def qty_for_max_loss(self):
+        result = None
+        if self.FOREX_MODE:
+            t = self.data.ticker.replace('frx', '')
+            usd_pos = t.find('USD')
+            if usd_pos == 0:  # USDxxx
+                result = self.MAX_LOSS / (self.stop_diff / self.entry_price)
+            elif usd_pos == 3:  # xxxUSD
+                result = self.MAX_LOSS / self.stop_diff
+            elif usd_pos == -1:  # cross pair
+                quote_currency = t[3:]
+                #print(f"{t}, quote {quote_currency}, usd_rates: {self.usd_rates}")
+                result = self.MAX_LOSS / self.stop_diff / self.usd_rates[quote_currency]
+            else:
+                raise KeyError(f"qty_for_max_loss: Wrong place for USD in ticker '{t}")
+        else:
+            result = self.MAX_LOSS / self.stop_diff
+        return result
 
     def add_limit_order(self, price, size):
         o = {'price': price, 'size': size}
         self.orders.append(o)
 
+    def get_message(self):
+        message = None
+        if self.action is None:
+            pass
+        elif self.action == TPSAction.CLOSE:
+            message = f"<b>{self.data.ticker}</b>: rsi={self.rsi:.2f}"
+        else:
+            side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
+            message = f"<b>{self.data.ticker}</b>:   {side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n    entry @ {self.entry_price:.5f}"
+            for o in self.orders:
+                message += f"\n    x{o['size']}    @ {o['price']:.5f}"
+            # loss ${action.loss_per_lot:.6f}; 
+            message += f"\n    stop  @ {self.stop_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> for ${self.MAX_LOSS} loss\n"
+        return message
 
 class TPS(bt.Strategy):
     params = (
@@ -792,6 +829,8 @@ class TPS(bt.Strategy):
 
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
+        TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
+        TPSAction.MAX_LOSS = self.params.max_loss
         self.o = {}
         self.sma = {}
         self.rsi = {}
@@ -812,7 +851,7 @@ class TPS(bt.Strategy):
 
         if self.params.trade['send_signals']:
             self.last_sent_timestamp = None
-            self.messages = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
+            self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
             #self.broker.post_message(f"{self.__class__.__name__} started")
 
     def notify_order(self, order):
@@ -868,7 +907,7 @@ class TPS(bt.Strategy):
             (d.ticker, text, order.ref, order.size, order.created.price, lot_count))
         self.last_entry_price[d] = order.created.price
 
-    def add_stages(self, action, max_loss):
+    def add_stages(self, action):
         qty = 1
         value = action.entry_price
         for i in range(1, 4):
@@ -877,10 +916,8 @@ class TPS(bt.Strategy):
             qty += i + 1
             action.add_limit_order(px, i + 1)
         px = action.entry_price - action.level * 4 * action.action
-        value = abs(px * qty - value)
-        if action.data.ticker.find('USD') == 0:  # reversed quote
-            value /= action.entry_price
-        action.set_stop_loss(px, value, max_loss / value)
+        stop_diff = abs(px * qty - value)
+        action.set_stop_loss(px, stop_diff)
 
     def execute_action(self, action):
         if action.action is None:
@@ -902,35 +939,21 @@ class TPS(bt.Strategy):
     def add_action(self, action):
         self.execute_action(action)
         if self.params.trade['send_signals']:
-            message = None
-            index = 0
-            if action.action is None:
-                pass
-            elif action.action == TPSAction.CLOSE:
-                message = f"<b>{action.data.ticker}</b>: rsi={action.rsi:.2f}"
-                index = 1
-            else:
-                side = 'LONG  🟢' if action.action == TPSAction.LONG else 'SHORT 🔴'
-                message = f"<b>{action.data.ticker}</b>:   {side}, rsi={action.rsi:.1f}, atr={action.volatility:.2f}%, to_sma={action.levels2sma:.2f}\n    entry @ {action.entry_price:.5f}"
-                for o in action.orders:
-                    message += f"\n    x{o['size']}    @ {o['price']:.5f}"
-                # loss ${action.loss_per_lot:.6f}; 
-                message += f"\n    stop  @ {action.stop_price:.5f}, qty <u>{action.qty_for_max_loss:.3f}</u> for ${self.params.max_loss} loss\n"
-
             ticker = action.data.ticker
             timestamp = action.data.datetime.datetime(0)
             self.ticker_timestamps[ticker] = timestamp
-            self.messages[index][ticker] = message
-            #self.log(action.data, f">>{index}, {timestamp}, last {self.last_sent_timestamp}: {message}")
+            self.actions[1 if action.action == TPSAction.CLOSE else 0][ticker] = action
             if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
                 part_num = 0
-                for i, m in enumerate(self.messages):
+                for i, act in enumerate(self.actions):
                     part_num += 1
                     post = f"#{part_num} {self.POST_HEADERS[i]}\n"
                     for k in sorted(self.ticker_timestamps.keys()):
-                        message = m.get(k, None)
-                        if message is not None: 
-                            post += f"\n{m[k]}"
+                        a = act.get(k, None)
+                        if a is not None:
+                            message = act[k].get_message()
+                            if message is not None:
+                                post += f"\n{message}"
                         if len(post) > 2048:
                             self.broker.post_message(post)
                             part_num += 1
@@ -938,10 +961,25 @@ class TPS(bt.Strategy):
                     if len(post) > 0:
                         self.broker.post_message(post)
                 self.last_sent_timestamp = timestamp
-                self.messages = [{}, {}]
+                self.actions = [{}, {}]
 
     def next(self):
         for i, d in enumerate(self.datas):
+            if TPSAction.FOREX_MODE:
+                t = d.ticker.replace('frx', '')
+                #print(f"{t}.find('USD')")
+                usd_pos = t.find('USD')
+                if usd_pos == 0:  # USDxxx
+                    currency = t[3:]
+                    TPSAction.usd_rates[currency] = 1 / d.close[0]
+                    #print(f"TPSAction.usd_rates[{currency}] = {TPSAction.usd_rates[currency]}")
+                elif usd_pos == 3:  # xxxUSD
+                    currency = t[0:3]
+                    TPSAction.usd_rates[currency] = d.close[0]
+                    #print(f"TPSAction.usd_rates[{currency}] = {TPSAction.usd_rates[currency]}")
+                elif usd_pos != -1:  # cross pair
+                    raise KeyError(f"usd_rates: Wrong place for USD in ticker '{t}")
+
             if d.volume == 0:
                 continue
 
@@ -951,6 +989,7 @@ class TPS(bt.Strategy):
             
             self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
             # {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n
+
             level = self.atr[d].atr[0] * self.params.atr_multiplier
             p = self.getposition(d)
             above_sma = d.close[0] > self.sma[d].sma[0]
@@ -962,13 +1001,13 @@ class TPS(bt.Strategy):
                     # 2 periods below, go long
                     action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
                     action.set_entry(d.close[0], 1)
-                    self.add_stages(action, self.params.max_loss)
+                    self.add_stages(action)
                     self.add_action(action)
                 elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > 4:
                     # 2 periods above, go short
                     action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
                     action.set_entry(d.close[0], 1)
-                    self.add_stages(action, self.params.max_loss)
+                    self.add_stages(action)
                     self.add_action(action)
                 else:
                     action = TPSAction(d)
