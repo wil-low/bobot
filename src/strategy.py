@@ -851,7 +851,7 @@ class TPS(bt.Strategy):
         if self.params.trade['send_signals']:
             self.last_sent_timestamp = None
             self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
-            #self.broker.post_message(f"{self.__class__.__name__} started")
+        self.broker.post_message(f"{self.params.trade['log_name']} started")
 
     def notify_order(self, order):
         #self.log(order.data, f"notify_order: {str(order)}")
