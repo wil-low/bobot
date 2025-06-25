@@ -14,6 +14,10 @@ class BybitLiveData(BobotLiveDataBase):
     BASE_URL = "https://api.bybit.com"
     CANDLESTICK_ENDPOINT = "/v5/market/kline"
 
+    shared_ws = None
+    shared_ws_thread = None
+    consumers = {}  # symbol: BybitLiveData
+
     def __init__(self, logger, symbol, granularity, history_size, use_ws):
         super().__init__(logger, symbol, granularity, history_size)
         self.bar = None
@@ -24,6 +28,9 @@ class BybitLiveData(BobotLiveDataBase):
         super().start()
         #print(f"BybitLive start {self.ticker} {self.bar}")
         self.fetch_history()
+
+    def get_consumer(symbol):
+        return BybitLiveData.consumers[symbol]
 
     def fetch_candles(self, start_time, end_time):
         """
@@ -95,7 +102,7 @@ class BybitLiveData(BobotLiveDataBase):
 
         response = requests.get(url, params=params)
         data = response.json()
-        self.log(data)
+        #self.log(data)
         if data["retCode"] != 0:
             self.log(f"Error fetching data: {data['retMsg']}")
             return
@@ -119,7 +126,7 @@ class BybitLiveData(BobotLiveDataBase):
             #self.log(f"Hist bar queued for epoch: {self.last_epoch}")
             self.md.put(c)
         self.last_epoch += self.granularity * 60
-        self.log(f"last_epoch: {self.last_epoch}")
+        #self.log(f"last_epoch: {self.last_epoch}")
         if self.use_ws:
             self.reset_ohlc()
             self._start_ws()
@@ -128,6 +135,9 @@ class BybitLiveData(BobotLiveDataBase):
         def on_open(ws):
             self.log("WebSocket connected.")
             self.keep_alive(json.dumps({"op": "ping"}))
+            request_ticks(ws)
+
+        def request_ticks(ws):
             # Subscribe to the candlestick channel
             params = {
                 "op": "subscribe",
@@ -146,11 +156,12 @@ class BybitLiveData(BobotLiveDataBase):
                     self.log("Failed:", data)
                 return
             if "topic" in data:
-                op = data['topic'].split('.')[0]
+                op, _, symbol = data['topic'].split('.')
+                consumer = BybitLiveData.get_consumer(symbol)
                 if op == "kline":
                     for candle in data["data"]:
                         if candle["confirm"]:
-                            #self.log(f"candle: {candle}")
+                            consumer.log(f"candle: {candle}")
                             ts = int(candle["start"])
                             c = {
                                 "epoch": int(ts / 1000),
@@ -160,10 +171,10 @@ class BybitLiveData(BobotLiveDataBase):
                                 "close": float(candle["close"]),
                                 "volume": 1 #float(candle["volume"]),
                             }
-                            self.last_epoch = c['epoch']
-                            #self.ohlc['close'] = c['close']
-                            self.log(f"WS bar queued for epoch: {self.last_epoch}: {c}")
-                            self.md.put(c)
+                            consumer.last_epoch = c['epoch']
+                            #consumer.ohlc['close'] = c['close']
+                            #consumer.log(f"WS bar queued for epoch: {consumer.last_epoch}: {c}")
+                            consumer.md.put(c)
 
         def on_error(ws, message):
             self.log(f"[BybitLiveData] on_error: {repr(message)}")
@@ -172,14 +183,23 @@ class BybitLiveData(BobotLiveDataBase):
             self.log(f"[BybitLiveData] WebSocket closed: {close_status_code} - {close_msg}")
         
         def run_ws():
-            self.ws = websocket.WebSocketApp(f"wss://stream.bybit.com/v5/public/linear",
-                on_open=on_open,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close
-            )
-            self.ws.run_forever()
+            if BybitLiveData.shared_ws is None:
+                BybitLiveData.shared_ws  = websocket.WebSocketApp(f"wss://stream.bybit.com/v5/public/linear",
+                    on_open=on_open,
+                    on_message=on_message,
+                    on_error=on_error,
+                    on_close=on_close
+                )
+                self.ws = BybitLiveData.shared_ws
+                BybitLiveData.shared_ws.run_forever()
 
-        self.thread = threading.Thread(target=run_ws)
-        self.thread.daemon = True
-        self.thread.start()
+        BybitLiveData.consumers[self.symbol] = self
+        if BybitLiveData.shared_ws_thread is None:
+            BybitLiveData.shared_ws_thread = threading.Thread(target=run_ws)
+            BybitLiveData.shared_ws_thread.daemon = True
+            BybitLiveData.shared_ws_thread.start()
+            time.sleep(2)
+        else:
+            self.ws = BybitLiveData.shared_ws
+            request_ticks(self.ws)
+
