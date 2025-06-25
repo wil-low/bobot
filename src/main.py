@@ -16,9 +16,12 @@ import backtrader as bt
 
 from broker.deriv import DerivBroker
 from broker.okx import OKXBroker
+from broker.bybit import BybitBroker
+
 from feed.deriv import DerivLiveData
 from feed.okx import OKXLiveData
 from feed.bybit import BybitLiveData
+
 from strategy import TPS, Anty, KissIchimoku, RSIPowerZones
 from strategy_stat import CointegratedPairs, MarketNeutral
 
@@ -35,7 +38,7 @@ def run_bot():
     #    format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>')
     #    #filter = lambda record: record['extra'] is {})
     name = config["strategy"].get("log_name", config["strategy"]["name"])
-    logger.add('log/live_%s_%04d%02d%02d.log' % (name, tm.tm_year, tm.tm_mon, tm.tm_mday),
+    logger.add('log/%s/live_%04d%02d%02d.log' % (name, tm.tm_year, tm.tm_mon, tm.tm_mday),
             format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}')
             #filter = lambda record, ticker=b['config["ticker"]']: record['extra'].get("ticker", '') == ticker)
 
@@ -57,7 +60,7 @@ def run_bot():
             elif config['feed']['provider'] == "OKX":
                 data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
             elif config['feed']['provider'] == "Bybit":
-                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'], use_ws=False)
+                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'], use_ws=True)
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
@@ -84,6 +87,14 @@ def run_bot():
             api_secret=config['auth']['api_secret'],
             api_passphrase=config['auth']['api_passphrase'],
             contract_expiration_min=config['trade']['expiration_min']
+        )
+    elif config['trade']['broker'] == "Bybit":
+        broker = BybitBroker(
+            logger=logger,
+            bot_token=config['auth']['bot_token'],
+            channel_id=config['auth']['channel_id'],
+            api_key=config['auth']['api_key'],
+            api_secret=config['auth']['api_secret']
         )
     cerebro.setbroker(broker)
 

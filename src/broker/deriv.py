@@ -94,13 +94,6 @@ class DerivBroker(BobotBrokerBase):
         t.daemon = True
         t.start()
 
-    def add_position(self, symbol, is_buy, price, size):
-        if not is_buy:
-            size = -size
-        p = bt.Position(size, price)
-        #self.log(f"Add position for {symbol}: px {price}, size {size}")
-        self.positions[symbol] = p
-
     def buy_contract(self, symbol, is_buy, size):
         msg = {
             "proposal": 1,
@@ -129,10 +122,6 @@ class DerivBroker(BobotBrokerBase):
 
     def getvalue(self):
         return self.cash
-
-    def getposition(self, data):
-        #self.log(f"getposition for {data.ticker}")
-        return self.positions.get(data.ticker)
 
     def buy(self, owner=None, data=None, size=None, price=None, plimit=None,
             exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,

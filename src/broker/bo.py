@@ -28,10 +28,6 @@ class BinaryOptionsBroker(BobotBrokerBase):
     def getvalue(self):
         return self.cash
 
-    def getposition(self, data):
-        #self.log(f"getposition for {data.ticker}")
-        return self.positions.get(data)
-
     def buy(self, owner=None, data=None, size=None, price=None, plimit=None,
             exectype=None, valid=None, tradeid=0, oco=None, trailamount=None,
             trailpercent=None, parent=None, transmit=True, **kwargs):

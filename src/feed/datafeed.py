@@ -128,7 +128,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         self._candle_consumed = True  # Only set to True after setting lines
         return True
 
-    def keep_alive(self, message):
+    def keep_alive(self, message, interval=30):
         def send_ping():
             #self.log(f"send_ping {message}")
             if self.ws:
@@ -143,7 +143,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
             else:
                 self.log("ping: WebSocket not connected")
 
-            # Re-run the send_ping function every 30 seconds
+            # Re-run the send_ping function every n seconds
             self._schedule_next_ping()
 
         def start_send_ping():
@@ -151,7 +151,7 @@ class BobotLiveDataBase(bt.feeds.DataBase):
             send_ping()
 
         # Start the periodic call using Timer
-        self._schedule_next_ping = lambda: threading.Timer(30, send_ping).start()
+        self._schedule_next_ping = lambda: threading.Timer(interval, send_ping).start()
 
         # First call to start the periodic checks
         start_send_ping()

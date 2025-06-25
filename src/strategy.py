@@ -808,7 +808,7 @@ class TPS(bt.Strategy):
         ('short_entry', 75),
         ('short_exit', 30),
         ('atr_multiplier', 0.5),
-        ('max_loss', 50),  # in USD
+        ('min_atr_to_sma', 4),
         ('logger', None),
     )
 
@@ -830,14 +830,13 @@ class TPS(bt.Strategy):
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
-        TPSAction.MAX_LOSS = self.params.max_loss
+        TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
         self.o = {}
         self.sma = {}
         self.rsi = {}
         self.atr = {}
         self.pos_stage = {}
         self.last_entry_price = {}
-        self.lot_size = {}
         self.ticker_timestamps = {}  # ticker: timestamp
         for d in self.datas:
             self.sma[d] = bt.indicators.SMA(d, period=200)
@@ -845,7 +844,6 @@ class TPS(bt.Strategy):
             self.atr[d] = bt.indicators.AverageTrueRange(d, period=10)
             self.pos_stage[d] = 0
             self.last_entry_price[d] = None
-            self.lot_size[d] = None
             self.ticker_timestamps[d.ticker] = None
             self.broker.register_ticker(d.ticker)
 
@@ -924,17 +922,18 @@ class TPS(bt.Strategy):
             return
         if self.params.trade['send_orders']:
             if action.action == TPSAction.CLOSE:
-                self.close(action.data)
-                #TODO: cancel active orders
+                self.close(action.data, reduceOnly=True)
+                self.broker.cancel_all(action.data)
             else:
+                lot_size = action.qty_for_max_loss()
                 if action.action == TPSAction.LONG:
-                    self.submit_buy(action.data, action.entry_size, 'CREATE')
+                    self.buy(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, plimit=action.stop_price)
                     for o in action.orders:
-                        self.buy(data=action.data, size=self.lot_size[action.data] * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
                 elif action.action == TPSAction.SHORT:
-                    self.submit_sell(action.data, action.entry_size, 'CREATE')
+                    self.sell(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, plimit=action.stop_price)
                     for o in action.orders:
-                        self.sell(data=action.data, size=self.lot_size[action.data] * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
 
     def add_action(self, action):
         self.execute_action(action)
@@ -964,7 +963,12 @@ class TPS(bt.Strategy):
                 self.actions = [{}, {}]
 
     def next(self):
-        for i, d in enumerate(self.datas):
+        pos_count = 0
+        for d in self.datas:
+            if self.getposition(d).size != 0:
+                pos_count += 1
+
+        for d in self.datas:
             if TPSAction.FOREX_MODE:
                 t = d.ticker.replace('frx', '')
                 #print(f"{t}.find('USD')")
@@ -982,60 +986,42 @@ class TPS(bt.Strategy):
 
             if d.volume == 0:
                 continue
-
-            if self.lot_size[d] is None:
-                self.lot_size[d] = self.params.trade['position_value'] / d.close[0]
-                self.log(d, f"Lot size = {self.lot_size[d]}")
             
             self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
-            # {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (TF {self.params.trade['expiration_min']} min)\n
 
             level = self.atr[d].atr[0] * self.params.atr_multiplier
             p = self.getposition(d)
             above_sma = d.close[0] > self.sma[d].sma[0]
-            if p is None or p.size == 0:
-                # no position
-                self.pos_stage[d] = 1
-                levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
-                if above_sma and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels2sma > 4:
-                    # 2 periods below, go long
-                    action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
-                    action.set_entry(d.close[0], 1)
-                    self.add_stages(action)
-                    self.add_action(action)
-                elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > 4:
-                    # 2 periods above, go short
-                    action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
-                    action.set_entry(d.close[0], 1)
-                    self.add_stages(action)
-                    self.add_action(action)
-                else:
-                    action = TPSAction(d)
-                    if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
-                        action.action = TPSAction.CLOSE
-                        action.rsi = self.rsi[d].rsi[0]
-                    self.add_action(action)
+            check4close = False
+            action = TPSAction(d)
+            if p.size == 0:
+                if pos_count < 3 or not self.params.trade['send_orders']:
+                    # no position
+                    self.pos_stage[d] = 1
+                    levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
+                    if above_sma and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels2sma > self.params.min_atr_to_sma:
+                        # 2 periods below, go long
+                        pos_count += 1
+                        action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                        action.set_entry(d.close[0], 1)
+                        self.add_stages(action)
+                    elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > self.params.min_atr_to_sma:
+                        # 2 periods above, go short
+                        pos_count += 1
+                        action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                        action.set_entry(d.close[0], 1)
+                        self.add_stages(action)
+                    elif not self.params.trade['send_orders']:
+                        check4close = True
             else:
-                if p.size > 0:
-                    # in long position
-                    if self.rsi[d].rsi[0] > self.params.long_exit:
-                        self.log(d, "CLOSE LONG POSITION")
-                        if self.params.trade['send_orders']:
-                            self.close(d)
-                    elif d.close[0] > self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] < self.last_entry_price[d]:
-                        if self.params.trade['send_orders']:
-                            self.submit_buy(d, self.pos_stage[d], 'ADD')
-                            self.pos_stage[d] += 1
-                elif p.size < 0:
-                    # in short position
-                    if self.rsi[d].rsi[0] < self.params.short_exit:
-                        self.log(d, "CLOSE SHORT POSITION")
-                        if self.params.trade['send_orders']:
-                            self.close(d)
-                    elif d.close[0] < self.sma[d].sma[0] and self.pos_stage[d] < 5 and d.close[0] > self.last_entry_price[d]:
-                        if self.params.trade['send_orders']:
-                            self.submit_sell(d, self.pos_stage[d], 'ADD')
-                            self.pos_stage[d] += 1
+                check4close = True
+            # check for close
+            if check4close:
+                if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
+                    #self.log(d, f"Close position {p.size}")
+                    action.action = TPSAction.CLOSE
+                    action.rsi = self.rsi[d].rsi[0]
+            self.add_action(action)
 
 
 class CRSISP500(bt.Strategy):

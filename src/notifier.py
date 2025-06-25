@@ -1,31 +1,14 @@
 from datetime import datetime
 import requests
 
-class TgNotifier:
-    def __init__(self, logger, bot_token, channel_id):
+class NotifierBase:
+    def __init__(self, logger):
         self.logger = logger
-        self.bot_token = bot_token
-        self.channel_id = channel_id
-        self.last_sent_timestamp = None
         self.tickers = {}  # ticker: timestamp
         self.messages = {}  # ticker: message
 
     def post_message(self, message):
-        text = message
-        #self.logger.debug(f"post_message:\n{text}")
-        #return
-        url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
-        payload = {
-            'chat_id': self.channel_id,
-            'text': text,
-            'parse_mode': 'HTML', #'MarkdownV2',
-            'disable_notification': True,
-            'disable_web_page_preview': True
-        }
-        response = requests.post(url, data=payload)
-        json = response.json()
-        if not json['ok']:
-            self.logger.error(json)
+        raise NotImplementedError
 
     def register_ticker(self, ticker):
         ''' Register available tickers from a strategy, to compose batched messages '''
@@ -46,3 +29,35 @@ class TgNotifier:
                 self.last_sent_timestamp = timestamp
         else:
             raise KeyError(f"Unknown ticker: {ticker}")
+
+
+class LogNotifier(NotifierBase):
+    def __init__(self, logger):
+        super().__init__(logger)
+
+    def post_message(self, message):
+        self.logger.debug(f"LogNotifier.post_message:\n{message}")
+
+
+class TgNotifier(NotifierBase):
+    def __init__(self, logger, bot_token, channel_id):
+        super().__init__(logger)
+        self.bot_token = bot_token
+        self.channel_id = channel_id
+        self.last_sent_timestamp = None
+
+    def post_message(self, message):
+        text = message
+        self.logger.debug(f"TgNotifier.post_message:\n{text}")
+        url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
+        payload = {
+            'chat_id': self.channel_id,
+            'text': text,
+            'parse_mode': 'HTML', #'MarkdownV2',
+            'disable_notification': True,
+            'disable_web_page_preview': True
+        }
+        response = requests.post(url, data=payload)
+        json = response.json()
+        if not json['ok']:
+            self.logger.error(json)
