@@ -45,7 +45,6 @@ class BybitBroker(BobotBrokerBase):
         self.is_ready = False
         self.instrument_info = {}  # ticker: InstrumentInfo
         self.get_account_info()
-        self.get_position_info()
         self._connect()
 
     def http_request(self, endpoint, method, payload):
@@ -107,6 +106,7 @@ class BybitBroker(BobotBrokerBase):
                 if data.get('op', None) == 'auth':
                     self.keep_alive(json.dumps({"op": "ping"}), 20)
                     self.subscribe_positions()
+                    self.get_position_info()
                     self.is_ready = True
                 else:
                     topic = data.get('topic', None)

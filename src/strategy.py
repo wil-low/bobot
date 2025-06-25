@@ -831,6 +831,7 @@ class TPS(bt.Strategy):
         self.log(None, f"params: {self.params._getkwargs()}")
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
         TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
+        self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.o = {}
         self.sma = {}
         self.rsi = {}
@@ -995,7 +996,7 @@ class TPS(bt.Strategy):
             check4close = False
             action = TPSAction(d)
             if p.size == 0:
-                if pos_count < 3 or not self.params.trade['send_orders']:
+                if pos_count < self.max_positions or not self.params.trade['send_orders']:
                     # no position
                     self.pos_stage[d] = 1
                     levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
