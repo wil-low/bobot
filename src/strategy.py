@@ -1020,6 +1020,8 @@ class TPS(bt.Strategy):
             if check4close:
                 if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
                     #self.log(d, f"Close position {p.size}")
+                    if p.size != 0:
+                        pos_count -= 1
                     action.action = TPSAction.CLOSE
                     action.rsi = self.rsi[d].rsi[0]
             self.add_action(action)
