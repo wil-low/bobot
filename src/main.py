@@ -68,11 +68,13 @@ def run_bot():
     # Add broker
 
     broker = None
+    bot_token = config['auth'].get('bot_token', None)
+    channel_id = config['auth'].get('channel_id', None)
     if config['trade']['broker'] == "Deriv":
         broker = DerivBroker(
             logger=logger,
-            bot_token=config['auth']['bot_token'],
-            channel_id=config['auth']['channel_id'],
+            bot_token=bot_token,
+            channel_id=channel_id,
             app_id=config['auth']['account_id'],
             api_token=config['auth']['api_key'],
             contract_expiration_min=config['trade']['expiration_min'],
@@ -81,8 +83,8 @@ def run_bot():
     elif config['trade']['broker'] == "OKX":
         broker = OKXBroker(
             logger=logger,
-            bot_token=config['auth']['bot_token'],
-            channel_id=config['auth']['channel_id'],
+            bot_token=bot_token,
+            channel_id=channel_id,
             api_key=config['auth']['api_key'],
             api_secret=config['auth']['api_secret'],
             api_passphrase=config['auth']['api_passphrase'],
@@ -91,8 +93,8 @@ def run_bot():
     elif config['trade']['broker'] == "Bybit":
         broker = BybitBroker(
             logger=logger,
-            bot_token=config['auth']['bot_token'],
-            channel_id=config['auth']['channel_id'],
+            bot_token=bot_token,
+            channel_id=channel_id,
             api_key=config['auth']['api_key'],
             api_secret=config['auth']['api_secret']
         )

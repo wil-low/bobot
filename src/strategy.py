@@ -800,6 +800,7 @@ class TPSAction:
             message += f"\n    stop  @ {self.stop_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> for ${self.MAX_LOSS} loss\n"
         return message
 
+
 class TPS(bt.Strategy):
     params = (
         ('trade', {}),
@@ -836,14 +837,12 @@ class TPS(bt.Strategy):
         self.sma = {}
         self.rsi = {}
         self.atr = {}
-        self.pos_stage = {}
         self.last_entry_price = {}
         self.ticker_timestamps = {}  # ticker: timestamp
         for d in self.datas:
             self.sma[d] = bt.indicators.SMA(d, period=200)
             self.rsi[d] = bt.indicators.RSI_Safe(d, period=2)
             self.atr[d] = bt.indicators.AverageTrueRange(d, period=10)
-            self.pos_stage[d] = 0
             self.last_entry_price[d] = None
             self.ticker_timestamps[d.ticker] = None
             self.broker.register_ticker(d.ticker)
@@ -937,13 +936,33 @@ class TPS(bt.Strategy):
                         self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
 
     def add_action(self, action):
-        self.execute_action(action)
-        if self.params.trade['send_signals']:
-            ticker = action.data.ticker
-            timestamp = action.data.datetime.datetime(0)
-            self.ticker_timestamps[ticker] = timestamp
-            self.actions[1 if action.action == TPSAction.CLOSE else 0][ticker] = action
-            if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
+        ticker = action.data.ticker
+        timestamp = action.data.datetime.datetime(0)
+        self.ticker_timestamps[ticker] = timestamp
+        if action.action == TPSAction.CLOSE:
+            self.actions[1][ticker] = action
+        elif action.action is not None:
+            self.actions[0][ticker] = action
+        if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
+            # data for every ticker arrived
+            if self.params.trade['send_orders']:
+                # select best LONG/SHORT actions by largest atr%
+                # count positions
+                pos_count = 0
+                for d in self.datas:
+                    if self.getposition(d).size != 0:
+                        pos_count += 1
+                self.log(action.data, f"free_slots = {self.max_positions} - {pos_count} + {len(self.actions[1])}")
+                free_slots = self.max_positions - pos_count + len(self.actions[1])
+                open_actions = sorted(self.actions[0].items(), key=lambda item: item[1].volatility, reverse=True)[:free_slots]
+                for _, a in self.actions[1].items():  # close
+                    #self.log(action.data, f"execute_action1: {a.get_message()}")
+                    self.execute_action(a)
+                for _, a in open_actions:
+                    #self.log(a.data, f"execute_action0: {a.get_message()}")
+                    self.execute_action(a)
+
+            if self.params.trade['send_signals']:
                 part_num = 0
                 for i, act in enumerate(self.actions):
                     part_num += 1
@@ -964,11 +983,6 @@ class TPS(bt.Strategy):
                 self.actions = [{}, {}]
 
     def next(self):
-        pos_count = 0
-        for d in self.datas:
-            if self.getposition(d).size != 0:
-                pos_count += 1
-
         for d in self.datas:
             if TPSAction.FOREX_MODE:
                 t = d.ticker.replace('frx', '')
@@ -988,40 +1002,35 @@ class TPS(bt.Strategy):
             if d.volume == 0:
                 continue
             
-            self.log(d, "%s: c %.5f, sma %.5f, rsi %.5f" % (d.datetime.datetime(0).isoformat(), d.close[0], self.sma[d].sma[0], self.rsi[d].rsi[0]))
-
             level = self.atr[d].atr[0] * self.params.atr_multiplier
+            levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
+            volatility = level / d.close[0] * 100
+            self.log(d, f"{d.datetime.datetime(0).isoformat()}: c {d.close[0]:.5f}, sma {self.sma[d].sma[0]:.5f}, rsi {self.rsi[d].rsi[0]:.5f}, atr={volatility:.2f}%, to_sma={levels2sma:.2f}")
+
             p = self.getposition(d)
             above_sma = d.close[0] > self.sma[d].sma[0]
             check4close = False
             action = TPSAction(d)
             if p.size == 0:
-                if pos_count < self.max_positions or not self.params.trade['send_orders']:
-                    # no position
-                    self.pos_stage[d] = 1
-                    levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
-                    if above_sma and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels2sma > self.params.min_atr_to_sma:
-                        # 2 periods below, go long
-                        pos_count += 1
-                        action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
-                        action.set_entry(d.close[0], 1)
-                        self.add_stages(action)
-                    elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > self.params.min_atr_to_sma:
-                        # 2 periods above, go short
-                        pos_count += 1
-                        action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
-                        action.set_entry(d.close[0], 1)
-                        self.add_stages(action)
-                    elif not self.params.trade['send_orders']:
-                        check4close = True
+                # no position
+                if above_sma and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels2sma > self.params.min_atr_to_sma:
+                    # 2 periods below, go long
+                    action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                    action.set_entry(d.close[0], 1)
+                    self.add_stages(action)
+                elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > self.params.min_atr_to_sma:
+                    # 2 periods above, go short
+                    action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                    action.set_entry(d.close[0], 1)
+                    self.add_stages(action)
+                elif not self.params.trade['send_orders']:
+                    check4close = True
             else:
                 check4close = True
             # check for close
             if check4close:
                 if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
                     #self.log(d, f"Close position {p.size}")
-                    if p.size != 0:
-                        pos_count -= 1
                     action.action = TPSAction.CLOSE
                     action.rsi = self.rsi[d].rsi[0]
             self.add_action(action)
