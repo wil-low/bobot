@@ -793,11 +793,11 @@ class TPSAction:
             message = f"<b>{self.data.ticker}</b>: rsi={self.rsi:.2f}"
         else:
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
-            message = f"<b>{self.data.ticker}</b>:   {side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n    entry @ {self.entry_price:.5f}"
+            message = f"<b>{self.data.ticker}</b>\n{side}, rsi {self.rsi:.1f}, atr {self.volatility:.2f}%, to_sma {self.levels2sma:.2f}\n"
+            message += f"Entry: {self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
             for o in self.orders:
-                message += f"\n    x{o['size']}    @ {o['price']:.5f}"
-            # loss ${action.loss_per_lot:.6f}; 
-            message += f"\n    stop  @ {self.stop_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> for ${self.MAX_LOSS} loss\n"
+                message += f"\n    x{o['size']} @ {o['price']:.5f}"
+            message += f"\n    SL @ {self.stop_price:.5f}\n"
         return message
 
 
@@ -810,6 +810,7 @@ class TPS(bt.Strategy):
         ('short_exit', 30),
         ('atr_multiplier', 0.5),
         ('min_atr_to_sma', 4),
+        ('profit_loss_ratio', 0.5),
         ('logger', None),
     )
 
@@ -956,10 +957,10 @@ class TPS(bt.Strategy):
                 free_slots = self.max_positions - pos_count + len(self.actions[1])
                 open_actions = sorted(self.actions[0].items(), key=lambda item: item[1].volatility, reverse=True)[:free_slots]
                 for _, a in self.actions[1].items():  # close
-                    #self.log(action.data, f"execute_action1: {a.get_message()}")
+                    #self.log(action.data, f"execute open")
                     self.execute_action(a)
                 for _, a in open_actions:
-                    #self.log(a.data, f"execute_action0: {a.get_message()}")
+                    #self.log(a.data, f"execute close")
                     self.execute_action(a)
 
             if self.params.trade['send_signals']:
@@ -1009,7 +1010,7 @@ class TPS(bt.Strategy):
 
             p = self.getposition(d)
             above_sma = d.close[0] > self.sma[d].sma[0]
-            check4close = False
+            check_close_by_rsi = False
             action = TPSAction(d)
             if p.size == 0:
                 # no position
@@ -1024,11 +1025,18 @@ class TPS(bt.Strategy):
                     action.set_entry(d.close[0], 1)
                     self.add_stages(action)
                 elif not self.params.trade['send_orders']:
-                    check4close = True
+                    check_close_by_rsi = True
             else:
-                check4close = True
+                # position exists, compute UPnL
+                upnl = (d.close[0] - p.price) * p.size
+                self.log(d, f"upnl={upnl:.3f}")
+                if upnl > TPSAction.MAX_LOSS * self.params.profit_loss_ratio:
+                    action.action = TPSAction.CLOSE
+                    action.rsi = -1
+                else:
+                    check_close_by_rsi = True
             # check for close
-            if check4close:
+            if check_close_by_rsi:
                 if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
                     #self.log(d, f"Close position {p.size}")
                     action.action = TPSAction.CLOSE
