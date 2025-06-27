@@ -793,8 +793,8 @@ class TPSAction:
             message = f"<b>{self.data.ticker}</b>: rsi={self.rsi:.2f}"
         else:
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
-            message = f"<b>{self.data.ticker}</b>\n{side}, rsi {self.rsi:.1f}, atr {self.volatility:.2f}%, to_sma {self.levels2sma:.2f}\n"
-            message += f"Entry: {self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
+            message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
+            message += f"Entry={self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
             for o in self.orders:
                 message += f"\n    x{o['size']} @ {o['price']:.5f}"
             message += f"\n    SL @ {self.stop_price:.5f}\n"
