@@ -758,8 +758,9 @@ class TPSAction:
         self.volatility = self.atr / self.entry_price * 100
         self.orders = []
 
-    def set_stop_loss(self, price, stop_diff):
-        self.stop_price = price
+    def set_sl_tp(self, sl, tp, stop_diff):
+        self.sl = sl
+        self.tp = tp
         self.stop_diff = stop_diff
 
     def qty_for_max_loss(self):
@@ -797,7 +798,8 @@ class TPSAction:
             message += f"Entry={self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
             for o in self.orders:
                 message += f"\n    x{o['size']} @ {o['price']:.5f}"
-            message += f"\n    SL @ {self.stop_price:.5f}\n"
+            message += f"\n    SL @ {self.sl:.5f}"
+            message += f"\n    TP @ {self.tp:.5f}\n"
         return message
 
 
@@ -914,9 +916,10 @@ class TPS(bt.Strategy):
             value += px * (i + 1)
             qty += i + 1
             action.add_limit_order(px, i + 1)
-        px = action.entry_price - action.level * 4 * action.action
-        stop_diff = abs(px * qty - value)
-        action.set_stop_loss(px, stop_diff)
+        sl = action.entry_price - action.level * 4 * action.action
+        stop_diff = abs(sl * qty - value)
+        tp = action.entry_price + action.level * 4 * action.action  # SL:TP = 1:1
+        action.set_sl_tp(sl, tp, stop_diff)
 
     def execute_action(self, action):
         if action.action is None:
@@ -928,11 +931,11 @@ class TPS(bt.Strategy):
             else:
                 lot_size = action.qty_for_max_loss()
                 if action.action == TPSAction.LONG:
-                    self.buy(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, plimit=action.stop_price)
+                    self.buy(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
                     for o in action.orders:
                         self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
                 elif action.action == TPSAction.SHORT:
-                    self.sell(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, plimit=action.stop_price)
+                    self.sell(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
                     for o in action.orders:
                         self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
 

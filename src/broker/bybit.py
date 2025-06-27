@@ -214,7 +214,9 @@ class BybitBroker(BobotBrokerBase):
         )
         order.owner = owner
         order.data = data
-        order.reduce_only = kwargs.get('reduceOnly', False)
+        order.reduceOnly = kwargs.get('reduceOnly', False)
+        order.stopLoss = kwargs.get('stopLoss', None)
+        order.takeProfit = kwargs.get('takeProfit', None)
 
         self.submit(order)  # Submit the order to the broker
         return order
@@ -236,7 +238,9 @@ class BybitBroker(BobotBrokerBase):
         )
         order.owner = owner
         order.data = data
-        order.reduce_only = kwargs.get('reduceOnly', False)
+        order.reduceOnly = kwargs.get('reduceOnly', False)
+        order.stopLoss = kwargs.get('stopLoss', None)
+        order.takeProfit = kwargs.get('takeProfit', None)
 
         self.submit(order)  # Submit the order to the broker
         return order
@@ -246,9 +250,7 @@ class BybitBroker(BobotBrokerBase):
         symbol = data.ticker
         if order.price is not None:
             order.price = str(self.normalize_price(symbol, order.price))
-        if order.plimit is not None:
-            order.plimit = str(self.normalize_price(symbol, order.plimit))
-        if not order.reduce_only:
+        if not order.reduceOnly:
             order.size = self.normalize_qty(symbol, abs(order.size))
 
         self.log(f"submit: {symbol}, isbuy={order.isbuy()}, size={order.size}")
@@ -261,10 +263,14 @@ class BybitBroker(BobotBrokerBase):
         }
         if order.price is not None:
             form_data['price'] = str(order.price)
-        if order.plimit is not None:
-            form_data['stopLoss'] = str(order.plimit)
-        if order.reduce_only:
-            form_data['reduceOnly'] = order.reduce_only
+        if order.stopLoss is not None:
+            order.stopLoss = str(self.normalize_price(symbol, order.stopLoss))
+            form_data['stopLoss'] = order.stopLoss
+        if order.takeProfit is not None:
+            order.takeProfit = str(self.normalize_price(symbol, order.takeProfit))
+            form_data['takeProfit'] = order.takeProfit
+        if order.reduceOnly:
+            form_data['reduceOnly'] = order.reduceOnly
 
         form_data = json.dumps(form_data)
         self.logger.debug(form_data)
