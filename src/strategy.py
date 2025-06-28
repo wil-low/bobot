@@ -1022,11 +1022,12 @@ class TPS(bt.Strategy):
             p = self.getposition(d)
             if self.params.trade['send_orders']:
                 old_pos_size = self.position_sizes.get(d.ticker, 0)
+                self.position_sizes[d.ticker] = p.size
                 if old_pos_size != 0 and p.size == 0:
                     # position closed by SL or TP, cancel orders
                     self.log(d, f"position (old_size {old_pos_size}) closed by SL/TP, cancel orders if any")
                     self.broker.cancel_all(d)
-                self.position_sizes[d.ticker] = p.size
+                    continue  # skip entry/exit checks this time
 
             above_sma = d.close[0] > self.sma[d].sma[0]
             check_close_by_rsi = False
