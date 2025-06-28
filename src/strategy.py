@@ -859,9 +859,8 @@ class TPS(bt.Strategy):
                     self.log(d, "No position, cancel orders if any")
                     self.broker.cancel_all(d)
 
-        if self.params.trade['send_signals']:
-            self.last_sent_timestamp = None
-            self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
+        self.last_sent_timestamp = None
+        self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
         self.broker.post_message(f"{self.params.trade['log_name']} started")
 
     def notify_order(self, order):
@@ -1020,9 +1019,9 @@ class TPS(bt.Strategy):
             volatility = level / d.close[0] * 100
             self.log(d, f"{d.datetime.datetime(0).isoformat()}: c {d.close[0]:.5f}, sma {self.sma[d].sma[0]:.5f}, rsi {self.rsi[d].rsi[0]:.5f}, atr={volatility:.2f}%, to_sma={levels2sma:.2f}")
 
+            p = self.getposition(d)
             if self.params.trade['send_orders']:
                 old_pos_size = self.position_sizes.get(d.ticker, 0)
-                p = self.getposition(d)
                 if old_pos_size != 0 and p.size == 0:
                     # position closed by SL or TP, cancel orders
                     self.log(d, f"position (old_size {old_pos_size}) closed by SL/TP, cancel orders if any")

@@ -4,6 +4,7 @@ import requests
 class NotifierBase:
     def __init__(self, logger):
         self.logger = logger
+        self.last_sent_timestamp = None
         self.tickers = {}  # ticker: timestamp
         self.messages = {}  # ticker: message
 
@@ -44,7 +45,6 @@ class TgNotifier(NotifierBase):
         super().__init__(logger)
         self.bot_token = bot_token
         self.channel_id = channel_id
-        self.last_sent_timestamp = None
 
     def post_message(self, message):
         text = message
