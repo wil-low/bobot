@@ -7,14 +7,12 @@
     },
     "trade": {
         "log_name": "TPSBybit",
-        "broker": "Deriv",
-        "auth": "auth/deriv.json",
+        "broker": "Bybit",
+        "auth": "auth/bybit-testbot.json",
         "send_signals": true,
         "send_orders": false,
         "cash": 10000,
-        "min_payout": 0.75,
-        "stake": 1,
-        "expiration_min": 60,
+
         "max_loss": 50
     },
     "feed": {
@@ -22,7 +20,6 @@
         "auth": "auth/empty.json",
         "history_size": 210,
         "timeframe_min": [60],
-        "year": 2020,
         "tickers": [
             "BTCUSDT",
             "ETHUSDT",
