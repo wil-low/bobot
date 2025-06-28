@@ -64,7 +64,7 @@ class BybitLiveData(BobotLiveDataBase):
             klines += data
             start_time = int(data[-1][0]) + self.granularity * 1000
             self.log(f"new start_time={start_time}")
-            time.sleep(1)
+            time.sleep(0.5)
 
         with open(f"datasets/Bybit/{self.symbol}_M1{year}.csv", "w", newline="") as csvfile:
             writer = csv.writer(csvfile, delimiter=';')

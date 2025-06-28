@@ -824,7 +824,7 @@ class TPS(bt.Strategy):
     def log(self, data, txt, dt=None):
         ''' Logging function for this strategy'''
         ticker = ''
-        if data:
+        if data is not None:
             ticker = data.ticker
         if self.params.logger:
             self.params.logger.debug('%-10s: %s' % (ticker, txt))
@@ -842,6 +842,7 @@ class TPS(bt.Strategy):
         self.atr = {}
         self.last_entry_price = {}
         self.ticker_timestamps = {}  # ticker: timestamp
+        self.position_sizes = {}  # ticker: position size
         for d in self.datas:
             self.sma[d] = bt.indicators.SMA(d, period=200)
             self.rsi[d] = bt.indicators.RSI_Safe(d, period=2)
@@ -849,6 +850,14 @@ class TPS(bt.Strategy):
             self.last_entry_price[d] = None
             self.ticker_timestamps[d.ticker] = None
             self.broker.register_ticker(d.ticker)
+
+            if self.params.trade['send_orders']:
+                # cancel stray orders
+                p = self.getposition(d)
+                self.position_sizes[d.ticker] = p.size
+                if p.size == 0:
+                    self.log(d, "No position, cancel orders if any")
+                    self.broker.cancel_all(d)
 
         if self.params.trade['send_signals']:
             self.last_sent_timestamp = None
@@ -956,8 +965,8 @@ class TPS(bt.Strategy):
                 for d in self.datas:
                     if self.getposition(d).size != 0:
                         pos_count += 1
-                self.log(action.data, f"free_slots = {self.max_positions} - {pos_count} + {len(self.actions[1])}")
                 free_slots = self.max_positions - pos_count + len(self.actions[1])
+                self.log(action.data, f"free_slots: {self.max_positions} - {pos_count} + {len(self.actions[1])} = {free_slots}")
                 open_actions = sorted(self.actions[0].items(), key=lambda item: item[1].volatility, reverse=True)[:free_slots]
                 for _, a in self.actions[1].items():  # close
                     #self.log(action.data, f"execute open")
@@ -1011,7 +1020,15 @@ class TPS(bt.Strategy):
             volatility = level / d.close[0] * 100
             self.log(d, f"{d.datetime.datetime(0).isoformat()}: c {d.close[0]:.5f}, sma {self.sma[d].sma[0]:.5f}, rsi {self.rsi[d].rsi[0]:.5f}, atr={volatility:.2f}%, to_sma={levels2sma:.2f}")
 
-            p = self.getposition(d)
+            if self.params.trade['send_orders']:
+                old_pos_size = self.position_sizes.get(d.ticker, 0)
+                p = self.getposition(d)
+                if old_pos_size != 0 and p.size == 0:
+                    # position closed by SL or TP, cancel orders
+                    self.log(d, f"position (old_size {old_pos_size}) closed by SL/TP, cancel orders if any")
+                    self.broker.cancel_all(d)
+                self.position_sizes[d.ticker] = p.size
+
             above_sma = d.close[0] > self.sma[d].sma[0]
             check_close_by_rsi = False
             action = TPSAction(d)

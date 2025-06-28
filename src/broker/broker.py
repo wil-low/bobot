@@ -7,6 +7,15 @@ from datetime import datetime, timezone
 
 from notifier import LogNotifier, TgNotifier
 
+class InstrumentInfo:
+    def __init__(self, symbol):
+        self.symbol = symbol
+        self.max_leverage = None
+        self.price_scale = None
+        self.price_step = None
+        self.min_order_qty = None
+        self.qty_step = None 
+
 
 class BobotBrokerBase(bt.broker.BrokerBase):
     def log(self, txt, dt=None):
@@ -90,11 +99,13 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         if self.notifier:
             self.notifier.add_message(ticker, timestamp, self.timeframe, message)
 
-    def add_position(self, symbol, is_buy, price, size):
+    def add_position(self, symbol, is_buy, price, size, id=None, status='open'):
         if not is_buy:
             size = -size
         p = bt.Position(size, price)
-        self.log(f"Add position for {symbol}: px {price}, size {size}")
+        p.ref = id
+        p.status = status
+        self.log(f"Add position for {symbol}: px {price}, size {size}, ref={p.ref}")
         self.positions[symbol] = p
 
     def getposition(self, data):

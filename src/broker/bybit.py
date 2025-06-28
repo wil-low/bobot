@@ -11,16 +11,7 @@ import decimal
 from datetime import datetime, timezone
 import backtrader as bt
 
-from broker.broker import BobotBrokerBase
-
-class InstrumentInfo:
-    def __init__(self, symbol):
-        self.symbol = symbol
-        self.max_leverage = None
-        self.price_scale = None
-        self.min_order_qty = None
-        self.qty_step = None 
-
+from broker.broker import BobotBrokerBase, InstrumentInfo
 
 class BybitBroker(BobotBrokerBase):
 
@@ -179,7 +170,7 @@ class BybitBroker(BobotBrokerBase):
         }
 
         form_data = json.dumps(form_data)
-        self.logger.debug(form_data)
+        #self.logger.debug(form_data)
         result = self.http_request('/v5/position/set-leverage', 'POST', form_data)
         self.logger.debug(result)
 
@@ -273,7 +264,7 @@ class BybitBroker(BobotBrokerBase):
             form_data['reduceOnly'] = order.reduceOnly
 
         form_data = json.dumps(form_data)
-        self.logger.debug(form_data)
+        #self.logger.debug(form_data)
         result = self.http_request('/v5/order/create', 'POST', form_data)
         if result['retCode'] != 0:
             order.reject()
@@ -294,7 +285,7 @@ class BybitBroker(BobotBrokerBase):
             "orderId": order.ref
         }
         form_data = json.dumps(form_data)
-        self.logger.debug(form_data)
+        #self.logger.debug(form_data)
         result = self.http_request('/v5/order/cancel', 'POST', form_data)
 
     def cancel_all(self, data):
@@ -305,7 +296,7 @@ class BybitBroker(BobotBrokerBase):
             "symbol": symbol
         }
         form_data = json.dumps(form_data)
-        self.logger.debug(form_data)
+        #self.logger.debug(form_data)
         result = self.http_request('/v5/order/cancel-all', 'POST', form_data)
 
     def subscribe_positions(self):

@@ -17,6 +17,7 @@ import backtrader as bt
 from broker.deriv import DerivBroker
 from broker.okx import OKXBroker
 from broker.bybit import BybitBroker
+from broker.roboforex import RStockTrader
 
 from feed.deriv import DerivLiveData
 from feed.okx import OKXLiveData
@@ -25,12 +26,14 @@ from feed.bybit import BybitLiveData
 from strategy import TPS, Anty, KissIchimoku, RSIPowerZones
 from strategy_stat import CointegratedPairs, MarketNeutral
 
-def run_bot():
+def read_config(fn):
     config = {}
-    with open(sys.argv[1]) as f:
+    with open(fn) as f:
         config = json.load(f)
-        print(config)
+    return config
 
+def run_bot():
+    config = read_config(sys.argv[1])
     tm = time.localtime()
 
     logger.remove()
@@ -45,38 +48,57 @@ def run_bot():
     logger.info("")
     logger.info("Starting strategy")
 
-    config_tmp = config.copy()
-    del config_tmp['auth']
-    logger.debug(f"Config params: {config_tmp}")
+    logger.debug(f"Config params: {config}")
 
     cerebro = bt.Cerebro()
 
     # Add live data feed
+    feed_auth = read_config(config['feed']['auth'])
     for symbol in config['feed']['tickers']:
         for gran in config['feed']['timeframe_min']:
             data = None
             if config['feed']['provider'] == "Deriv":
-                data = DerivLiveData(logger=logger, app_id=config['auth']['account_id'], symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
+                data = DerivLiveData(
+                    logger=logger,
+                    app_id=feed_auth['account_id'],
+                    symbol=symbol, granularity=gran * 60,
+                    history_size=config['feed']['history_size'],
+                    history_only=config['feed']['history_only']
+                )
             elif config['feed']['provider'] == "OKX":
-                data = OKXLiveData(logger=logger, symbol=symbol, granularity=gran * 60, history_size=config['feed']['history_size'])
+                data = OKXLiveData(
+                    logger=logger, symbol=symbol,
+                    granularity=gran * 60,
+                    history_size=config['feed']['history_size']
+                )
             elif config['feed']['provider'] == "Bybit":
-                data = BybitLiveData(logger=logger, symbol=symbol, granularity=gran, history_size=config['feed']['history_size'], use_ws=True)
+                data = BybitLiveData(
+                    logger=logger,
+                    symbol=symbol,
+                    granularity=gran,
+                    history_size=config['feed']['history_size'],
+                    use_ws=True)
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
 
-    # Add broker
+    # Read notifier auth
+    notifier_auth = {}
+    if 'auth' in config['notifier']:
+        notifier_auth = read_config(config['notifier']['auth'])
+    bot_token = notifier_auth.get('api_key', None)
+    channel_id = notifier_auth.get('account_id', None)
 
+    # Add broker
     broker = None
-    bot_token = config['auth'].get('bot_token', None)
-    channel_id = config['auth'].get('channel_id', None)
+    broker_auth = read_config(config['trade']['auth'])
     if config['trade']['broker'] == "Deriv":
         broker = DerivBroker(
             logger=logger,
             bot_token=bot_token,
             channel_id=channel_id,
-            app_id=config['auth']['account_id'],
-            api_token=config['auth']['api_key'],
+            app_id=broker_auth['account_id'],
+            api_token=broker_auth['api_key'],
             contract_expiration_min=config['trade']['expiration_min'],
             min_payout=config['trade']['min_payout']
         )
@@ -85,9 +107,9 @@ def run_bot():
             logger=logger,
             bot_token=bot_token,
             channel_id=channel_id,
-            api_key=config['auth']['api_key'],
-            api_secret=config['auth']['api_secret'],
-            api_passphrase=config['auth']['api_passphrase'],
+            api_key=broker_auth['api_key'],
+            api_secret=broker_auth['api_secret'],
+            api_passphrase=broker_auth['api_passphrase'],
             contract_expiration_min=config['trade']['expiration_min']
         )
     elif config['trade']['broker'] == "Bybit":
@@ -95,9 +117,20 @@ def run_bot():
             logger=logger,
             bot_token=bot_token,
             channel_id=channel_id,
-            api_key=config['auth']['api_key'],
-            api_secret=config['auth']['api_secret']
+            api_key=broker_auth['api_key'],
+            api_secret=broker_auth['api_secret']
         )
+    elif config['trade']['broker'] == "RStockTrader":
+        broker = RStockTrader(
+            logger=logger,
+            bot_token=bot_token,
+            channel_id=channel_id,
+            account_id=broker_auth['account_id'],
+            api_key=broker_auth['api_key']
+        )
+    else:
+        raise NotImplementedError(config['trade']['broker'])
+
     cerebro.setbroker(broker)
 
     while not broker.ready():
