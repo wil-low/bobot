@@ -2,14 +2,13 @@
     "strategy": {
         "name": "Anty"
     },
-    "auth": {
-        "account_id": "<APP_ID>",
-        "api_key": "<APP_KEY>",
-        "bot_token": "<BOT_TOKEN>",
-        "channel_id": "<CHANNEL_ID>"
+    "notifier": {
+        "auth": "auth/<TG_CHANNEL_FN>"
     },
     "trade": {
+        "log_name": "<CUSTOM_LOG_NAME>",
         "broker": "Deriv",
+        "auth": "auth/<BROKER_AUTH_FN>",
         "send_signals": false,
         "send_orders": true,
         "cash": 100,
@@ -20,7 +19,8 @@
         "margin_qty": 50
     },
     "feed": {
-        "broker": "Deriv",
+        "provider": "Deriv",
+        "auth": "auth/<PROVIDER_AUTH_FN>",
         "history_size": 30,
         "timeframe_min": [5],
         "year": 2024,

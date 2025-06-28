@@ -173,8 +173,15 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-cfg/*
-!cfg/*_sample.json
+# auth files
+auth/*
+!auth/empty.json
+
+# configs
+alpha/cfg/*
+!alpha/cfg/*_sample.json
+cfg_stash/
+
 datasets/
 analysis/images
 analysis/csv

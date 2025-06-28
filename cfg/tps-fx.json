@@ -1,0 +1,50 @@
+{
+    "strategy": {
+        "name": "TPS"
+    },
+    "notifier": {
+        "-auth": "auth/tg_channel.json"
+    },
+    "trade": {
+        "log_name": "TPSFX",
+        "broker": "RStockTrader",
+        "auth": "auth/roboforex.json",
+        "forex_mode": true,
+        "send_signals": true,
+        "send_orders": true,
+        "cash": 10000,
+        "min_payout": 0.75,
+        "stake": 1,
+        "expiration_min": 5,
+        "max_loss": 50,
+        "max_positions": 3
+    },
+    "feed": {
+        "-provider": "HistData",
+        "provider": "Deriv",
+        "auth": "auth/deriv.json",
+        "history_size": 210,
+        "history_only": true,
+        "timeframe_min": [5],
+        "year": 2020,
+        "tickers": [
+            "frxXAGUSD"
+        ],
+        "-tickers": [
+            "frxGBPJPY",
+            "frxEURGBP",
+            "frxEURAUD",
+            "frxGBPCHF",
+            "frxNZDJPY",
+            "frxEURUSD",
+            "frxGBPUSD",
+            "frxAUDUSD",
+            "frxNZDUSD",
+            "frxUSDCAD",
+            "frxUSDCHF",
+            "frxUSDJPY",
+            "frxXAGUSD",
+            "frxXAUUSD"
+        ]
+    }
+}
