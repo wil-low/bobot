@@ -991,8 +991,8 @@ class TPS(bt.Strategy):
                             post = f"#{part_num} {self.POST_HEADERS[i]}\n"
                     if len(post) > 0:
                         self.broker.post_message(post)
-                self.last_sent_timestamp = timestamp
-                self.actions = [{}, {}]
+            self.last_sent_timestamp = timestamp
+            self.actions = [{}, {}]
 
     def next(self):
         for d in self.datas:
