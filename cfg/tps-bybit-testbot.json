@@ -3,24 +3,24 @@
         "name": "TPS"
     },
     "notifier": {
-        "-auth": "auth/tg_channel.json"
+        "auth": "auth/tg_channel.json"
     },
     "trade": {
         "log_name": "TPSBybitTestbot",
         "broker": "Bybit",
         "auth": "auth/bybit-testbot.json",
         "send_signals": true,
-        "send_orders": false,
+        "send_orders": true,
         "cash": 10000,
-        "expiration_min": 5,
-        "max_loss": 10,
+        "max_loss": 50,
         "max_positions": 5
     },
     "feed": {
         "provider": "Bybit",
         "auth": "auth/bybit-testbot.json",
         "history_size": 210,
-        "timeframe_min": [5],
+        "timeframe_min": [60],
+        "use_ws": false,
         "tickers": [
             "BTCUSDT",
             "ETHUSDT",

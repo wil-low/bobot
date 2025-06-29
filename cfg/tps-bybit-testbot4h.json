@@ -9,18 +9,18 @@
         "log_name": "TPSBybitTestbot4h",
         "broker": "Bybit",
         "auth": "auth/bybit-testbot15m.json",
-        "send_signals": true,
+        "send_signals": false,
         "send_orders": true,
         "cash": 10000,
-        "expiration_min": 240,
         "max_loss": 100,
-        "max_positions": 3
+        "max_positions": 5
     },
     "feed": {
         "provider": "Bybit",
         "auth": "auth/bybit-testbot15m.json",
         "history_size": 210,
         "timeframe_min": [240],
+        "use_ws": false,
         "tickers": [
             "BTCUSDT",
             "ETHUSDT",

@@ -12,7 +12,6 @@
         "send_signals": true,
         "send_orders": false,
         "cash": 10000,
-
         "max_loss": 50
     },
     "feed": {

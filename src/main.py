@@ -77,7 +77,7 @@ def run_bot():
                     symbol=symbol,
                     granularity=gran,
                     history_size=config['feed']['history_size'],
-                    use_ws=True)
+                    use_ws=config['feed'].get('use_ws', True))
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)
