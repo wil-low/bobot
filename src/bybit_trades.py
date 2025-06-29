@@ -1,0 +1,53 @@
+# bybit_trades.py
+
+import json
+import os
+import sys
+import time
+from loguru import logger  # pip install loguru
+
+# Get the parent directory and append it to sys.path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(parent_dir)
+sys.path.append(parent_dir + '/backtrader')
+
+import backtrader as bt
+
+from broker.bybit import BybitBroker
+
+def read_config(fn):
+    config = {}
+    with open(fn) as f:
+        config = json.load(f)
+    return config
+
+def bybit_trades():
+    config = read_config(sys.argv[1])
+
+    date_from = sys.argv[2]
+    date_to = sys.argv[3]
+
+    logger.info("")
+    logger.info("Starting bybit_trades")
+    logger.debug(config)
+
+    # Add broker
+    broker_auth = read_config(config['trade']['auth'])
+    broker = BybitBroker(
+        logger=logger,
+        bot_token=None,
+        channel_id=None,
+        api_key=broker_auth['api_key'],
+        api_secret=broker_auth['api_secret']
+    )
+
+    while not broker.ready():
+        time.sleep(0.5)
+
+    broker.get_trades(date_from, date_to)
+
+    while not broker.ready():
+        time.sleep(0.5)
+
+if __name__ == '__main__':
+    bybit_trades()

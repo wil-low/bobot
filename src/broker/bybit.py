@@ -38,7 +38,7 @@ class BybitBroker(BobotBrokerBase):
         self.get_account_info()
         self._connect()
 
-    def http_request(self, endpoint, method, payload):
+    def http_request(self, endpoint, method, payload, log_response=True):
         self.logger.debug(f"{method} {endpoint}: {payload}")
         headers = self.make_signature(payload)
         #self.logger.debug(headers)
@@ -50,7 +50,8 @@ class BybitBroker(BobotBrokerBase):
                 response = requests.get(self.url + endpoint + "?" + payload, headers=headers)
             response.raise_for_status()
             json_data = response.json()
-            self.logger.debug(f"http_response: {json_data}")
+            if log_response:
+                self.logger.debug(f"http_response: {json_data}")
         # If the request fails (404) then print the error.
         except requests.exceptions.HTTPError as error:
             self.logger.error(error)
@@ -338,32 +339,31 @@ class BybitBroker(BobotBrokerBase):
         self.trades_offset = 0
         self.trades_from = date_from
         self.trades_to = date_to
-        self.get_trades_chunk()
+        cursor = None
+        while True:
+            cursor = self.get_trades_chunk(cursor)
+            print(cursor)
+            if not cursor:
+                break 
+        self.write_trades_csv()
 
-    def get_trades_chunk(self):
-        msg = {
-            "profit_table": 1,
-            "description": 1,
-            "limit": self.trades_limit,
-            "offset": self.trades_offset,
-            "sort": "ASC",
-            "date_from": self.trades_from,
-            "date_to": self.trades_to
-        }
-        self.log(msg)
-        if self.ws:
-            self.ws.send(json.dumps(msg))
-        else:
-            self.log("⚠️ WebSocket not connected")
+    def get_trades_chunk(self, cursor):
+        startTime = int(datetime.strptime(self.trades_from, "%Y%m%d %H%M%S").timestamp() * 1000)
+        params = f"category=linear&limit=100&startTime={startTime}"
+        if cursor is not None:
+            params += f"&cursor={cursor}"
+        response = self.http_request('/v5/position/closed-pnl', 'GET', params, False)
+        self.trades += response['result']['list']
+        return response['result']['nextPageCursor']
 
     def write_trades_csv(self):
         # Convert Unix timestamps to human-readable format
         for trade in self.trades:
-            trade["purchase_time"] = datetime.fromtimestamp(trade["purchase_time"], timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-            trade["sell_time"] = datetime.fromtimestamp(trade["sell_time"], timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+            trade["createdTime"] = datetime.fromtimestamp(float(trade["createdTime"]) / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+            trade["updatedTime"] = datetime.fromtimestamp(float(trade["updatedTime"]) / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
         # Output file name
-        output_file = "analysis/csv/deriv_export.csv"
+        output_file = "analysis/csv/bybit_export.csv"
 
         # Write to CSV
         with open(output_file, mode="w", newline="") as file:
