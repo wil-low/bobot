@@ -323,7 +323,7 @@ class BybitBroker(BobotBrokerBase):
         response = self.http_request('/v5/order/realtime', 'GET', params)
         for item in response['result']['list']:
             data = self.find_data(item['symbol'])
-            if data:
+            if data is not None:
                 o = None
                 if item['side'] == 'Buy':
                     o = bt.BuyOrder(data=data, size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
