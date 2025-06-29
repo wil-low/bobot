@@ -131,6 +131,7 @@ def run_bot():
     else:
         raise NotImplementedError(config['trade']['broker'])
 
+    broker.datas = cerebro.datas
     cerebro.setbroker(broker)
 
     while not broker.ready():

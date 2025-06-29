@@ -843,6 +843,12 @@ class TPS(bt.Strategy):
         self.last_entry_price = {}
         self.ticker_timestamps = {}  # ticker: timestamp
         self.position_sizes = {}  # ticker: position size
+        
+        orders = self.broker.get_open_orders()
+        datas_with_open_orders = {}
+        for o in orders:
+            datas_with_open_orders[o.data.ticker] = o.data
+
         for d in self.datas:
             self.sma[d] = bt.indicators.SMA(d, period=200)
             self.rsi[d] = bt.indicators.RSI_Safe(d, period=2)
@@ -855,8 +861,8 @@ class TPS(bt.Strategy):
                 # cancel stray orders
                 p = self.getposition(d)
                 self.position_sizes[d.ticker] = p.size
-                if p.size == 0:
-                    self.log(d, "No position, cancel orders if any")
+                if p.size == 0 and d.ticker in datas_with_open_orders:
+                    self.log(d, "No position, cancel orders")
                     self.broker.cancel_all(d)
 
         self.last_sent_timestamp = None

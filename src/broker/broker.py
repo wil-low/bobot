@@ -37,6 +37,7 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         self.positions = {}
         self.ws = None
         self.notifs = collections.deque()
+        self.datas = {}
         self.notifier = None
         if bot_token is not None and channel_id is not None:
             self.notifier = TgNotifier(logger, bot_token, channel_id)
@@ -54,6 +55,12 @@ class BobotBrokerBase(bt.broker.BrokerBase):
             return self.notifs.popleft()
         except IndexError:
             pass
+        return None
+
+    def find_data(self, ticker):
+        for d in self.datas:
+            if d.ticker == ticker:
+                return d
         return None
 
     def keep_alive(self, message, interval=30):
@@ -113,4 +120,7 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         return self.positions.get(data.ticker, bt.Position(0, 0))
 
     def cancel_all(self, data):
+        raise NotImplementedError
+
+    def get_open_orders(self, data=None):
         raise NotImplementedError

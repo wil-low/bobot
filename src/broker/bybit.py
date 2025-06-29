@@ -313,6 +313,23 @@ class BybitBroker(BobotBrokerBase):
             except websocket.WebSocketConnectionClosedException:
                 os._exit(1)
 
+    def get_open_orders(self, data=None):
+        result = []
+        params = "category=linear&orderFilter=Order"
+        if data:
+            params += f"&symbol={data.ticker}"
+        else:
+            params += "&settleCoin=USDT"
+        response = self.http_request('/v5/order/realtime', 'GET', params)
+        for item in response['result']['list']:
+            o = None
+            if item['side'] == 'Buy':
+                o = bt.BuyOrder(data=self.find_data(item['symbol']), size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
+            else:
+                o = bt.SellOrder(data=self.find_data(item['symbol']), size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
+            result.append(o)
+        return result
+
     def get_trades(self, date_from, date_to):
         self.is_ready = False
         self.trades = []
