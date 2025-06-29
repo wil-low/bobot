@@ -54,7 +54,7 @@ def run_bot():
 
     # Add live data feed
     feed_auth = read_config(config['feed']['auth'])
-    for symbol in config['feed']['tickers']:
+    for symbol in sorted(set(config['feed']['tickers'])):
         for gran in config['feed']['timeframe_min']:
             data = None
             if config['feed']['provider'] == "Deriv":
