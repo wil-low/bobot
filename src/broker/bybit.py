@@ -322,12 +322,14 @@ class BybitBroker(BobotBrokerBase):
             params += "&settleCoin=USDT"
         response = self.http_request('/v5/order/realtime', 'GET', params)
         for item in response['result']['list']:
-            o = None
-            if item['side'] == 'Buy':
-                o = bt.BuyOrder(data=self.find_data(item['symbol']), size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
-            else:
-                o = bt.SellOrder(data=self.find_data(item['symbol']), size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
-            result.append(o)
+            data = self.find_data(item['symbol'])
+            if data:
+                o = None
+                if item['side'] == 'Buy':
+                    o = bt.BuyOrder(data=data, size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
+                else:
+                    o = bt.SellOrder(data=data, size=float(item['qty']), price=float(item['price']), exectype=bt.Order.Limit, simulated=True)
+                result.append(o)
         return result
 
     def get_trades(self, date_from, date_to):
