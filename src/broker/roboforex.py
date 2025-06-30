@@ -74,7 +74,7 @@ class RStockTrader(BobotBrokerBase):
                     symbol = 'frx' + item['ticker']
                     if symbol in self.tickers:
                         pos_size = item['volume']
-                        self.add_position(symbol, item['side'] == 'buy', item['open_price'], pos_size, item['id'])
+                        self.add_position(item['ticker'], item['side'] == 'buy', item['open_price'], pos_size, item['id'])
                         self.log(f"Add position: {item}")
 
     def getcash(self):
@@ -250,6 +250,8 @@ class RStockTrader(BobotBrokerBase):
             self.log(f"close_position: {symbol}, {data}")
             if response.status_code == 200:
                 del self.positions[symbol]
+        else:
+            self.log(f"close_position: not found for {symbol}")
 
     def get_trades(self, date_from, date_to):
         self.is_ready = False
