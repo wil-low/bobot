@@ -74,7 +74,7 @@ class RStockTrader(BobotBrokerBase):
                     symbol = 'frx' + item['ticker']
                     if symbol in self.tickers:
                         pos_size = item['volume']
-                        self.add_position(item['ticker'], item['side'] == 'buy', item['open_price'], pos_size, item['id'])
+                        self.add_position(symbol, item['side'] == 'buy', item['open_price'], pos_size, item['id'])
                         self.log(f"Add position: {item}")
 
     def getcash(self):
