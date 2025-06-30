@@ -18,8 +18,8 @@ class BybitBroker(BobotBrokerBase):
     DEMO_URL = "https://api-demo.bybit.com"
     #MAIN_URL = "https://api.bybit.nl"
 
-    def __init__(self, logger, bot_token, channel_id, api_key, api_secret):
-        super().__init__(logger, 0, bot_token, channel_id)
+    def __init__(self, logger, bot_token, channel_id, api_key, api_secret, tickers):
+        super().__init__(logger, 0, bot_token, channel_id, tickers)
         self.cash = 10000.0  # initial virtual balance
         self.api_key = api_key
         self.api_secret = api_secret
@@ -126,8 +126,10 @@ class BybitBroker(BobotBrokerBase):
 
     def get_position_info(self):
         result = self.http_request('/v5/position/list', 'GET', f"category=linear&settleCoin=USDT")
+        self.positions = {}
         for pos in result['result']['list']:
-            self.add_position(pos['symbol'], pos['side'] == 'Buy', float(pos['avgPrice']), float(pos['size']))
+            if pos['symbol'] in self.tickers:
+                self.add_position(pos['symbol'], pos['side'] == 'Buy', float(pos['avgPrice']), float(pos['size']))
 
     def getcash(self):
         return self.cash

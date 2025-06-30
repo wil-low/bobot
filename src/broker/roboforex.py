@@ -11,8 +11,8 @@ class RStockTrader(BobotBrokerBase):
 
     URL = "https://api.stockstrader.com"
 
-    def __init__(self, logger, bot_token, channel_id, account_id, api_key):
-        super().__init__(logger, 0, bot_token, channel_id)
+    def __init__(self, logger, bot_token, channel_id, account_id, api_key, tickers):
+        super().__init__(logger, 0, bot_token, channel_id, tickers)
         self.HEADERS = {'Authorization': f'Bearer {api_key}'}
         self.HEADERS_URLENCODED = self.HEADERS
         self.HEADERS_URLENCODED['Content-Type'] = "application/x-www-form-urlencoded"
@@ -46,18 +46,19 @@ class RStockTrader(BobotBrokerBase):
         self.log(f"get_order_info: {data}")
         if data['code'] == 'ok':
             for item in data['data']:
-                o = None
                 data = self.find_data('frx' + item['ticker'])
-                if item['side'] == 'buy':
-                    o = bt.BuyOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
-                else:
-                    o = bt.SellOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
-                o.ref = item['id']
-                #pos.ref = item['id']
-                #pos.status = item['status']
-                self.orders[o.ref] = o
-                orders.append(o)
-                #self.log(f"Add order: {o}")
+                if data is not None:
+                    o = None
+                    if item['side'] == 'buy':
+                        o = bt.BuyOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
+                    else:
+                        o = bt.SellOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
+                    o.ref = item['id']
+                    #pos.ref = item['id']
+                    #pos.status = item['status']
+                    self.orders[o.ref] = o
+                    orders.append(o)
+                    #self.log(f"Add order: {o}")
         return orders
 
     def get_position_info(self):
@@ -70,9 +71,11 @@ class RStockTrader(BobotBrokerBase):
             self.positions = {}
             for item in data['data']:
                 if item['status'] == 'open':
-                    pos_size = item['volume']
-                    self.add_position('frx' + item['ticker'], item['side'] == 'buy', item['open_price'], pos_size, item['id'])
-                    self.log(f"Add position: {item}")
+                    symbol = 'frx' + item['ticker']
+                    if symbol in self.tickers:
+                        pos_size = item['volume']
+                        self.add_position(symbol, item['side'] == 'buy', item['open_price'], pos_size, item['id'])
+                        self.log(f"Add position: {item}")
 
     def getcash(self):
         return self.cash
@@ -234,7 +237,7 @@ class RStockTrader(BobotBrokerBase):
     def cancel_all(self, data):
         symbol = data.ticker
         for o in self.orders.copy().values():
-            print(f"cancel_all: ref {o.ref}")
+            #print(f"cancel_all: ref {o.ref}")
             if o.data.ticker == symbol:
                 self.cancel(o)
 

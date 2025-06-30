@@ -10,8 +10,8 @@ from broker.broker import BobotBrokerBase
 
 
 class DerivBroker(BobotBrokerBase):
-    def __init__(self, logger, bot_token, channel_id, app_id, api_token, contract_expiration_min, min_payout=0.8):
-        super().__init__(logger, contract_expiration_min, bot_token, channel_id)
+    def __init__(self, logger, bot_token, channel_id, app_id, api_token, contract_expiration_min, min_payout, tickers):
+        super().__init__(logger, contract_expiration_min, bot_token, channel_id, tickers)
         self.cash = 10000.0  # initial virtual balance
         self.min_payout = min_payout
         self.order_id = 1

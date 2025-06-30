@@ -26,10 +26,11 @@ class BobotBrokerBase(bt.broker.BrokerBase):
         else:
             print('%-10s: %s' % (ticker, txt))
 
-    def __init__(self, logger, timeframe, bot_token, channel_id):
+    def __init__(self, logger, timeframe, bot_token, channel_id, tickers):
         super().__init__()
         self.logger = logger
         self.timeframe = timeframe
+        self.tickers = tickers
         self.is_ready = False
         self.trades = []
         self.trades_offset = 0

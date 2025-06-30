@@ -52,9 +52,10 @@ def run_bot():
 
     cerebro = bt.Cerebro()
 
+    tickers = sorted(set(config['feed']['tickers']))
     # Add live data feed
     feed_auth = read_config(config['feed']['auth'])
-    for symbol in sorted(set(config['feed']['tickers'])):
+    for symbol in tickers:
         for gran in config['feed']['timeframe_min']:
             data = None
             if config['feed']['provider'] == "Deriv":
@@ -101,7 +102,8 @@ def run_bot():
             app_id=broker_auth['account_id'],
             api_token=broker_auth['api_key'],
             contract_expiration_min=config['trade']['expiration_min'],
-            min_payout=config['trade']['min_payout']
+            min_payout=config['trade']['min_payout'],
+            tickers=tickers
         )
     elif config['trade']['broker'] == "OKX":
         broker = OKXBroker(
@@ -111,7 +113,8 @@ def run_bot():
             api_key=broker_auth['api_key'],
             api_secret=broker_auth['api_secret'],
             api_passphrase=broker_auth['api_passphrase'],
-            contract_expiration_min=config['trade']['expiration_min']
+            contract_expiration_min=config['trade']['expiration_min'],
+            tickers=tickers
         )
     elif config['trade']['broker'] == "Bybit":
         broker = BybitBroker(
@@ -119,7 +122,8 @@ def run_bot():
             bot_token=bot_token,
             channel_id=channel_id,
             api_key=broker_auth['api_key'],
-            api_secret=broker_auth['api_secret']
+            api_secret=broker_auth['api_secret'],
+            tickers=tickers
         )
     elif config['trade']['broker'] == "RStockTrader":
         broker = RStockTrader(
@@ -127,7 +131,8 @@ def run_bot():
             bot_token=bot_token,
             channel_id=channel_id,
             account_id=broker_auth['account_id'],
-            api_key=broker_auth['api_key']
+            api_key=broker_auth['api_key'],
+            tickers=tickers
         )
     else:
         raise NotImplementedError(config['trade']['broker'])
