@@ -13,7 +13,7 @@
         "send_signals": true,
         "send_orders": true,
         "max_loss": 50,
-        "max_positions": 3
+        "max_positions": 5
     },
     "feed": {
         "provider": "Deriv",
