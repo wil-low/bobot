@@ -63,7 +63,7 @@ def run_bot():
                     app_id=feed_auth['account_id'],
                     symbol=symbol, granularity=gran * 60,
                     history_size=config['feed']['history_size'],
-                    history_only=config['feed']['history_only']
+                    realtime_md=config['feed']['realtime_md']
                 )
             elif config['feed']['provider'] == "OKX":
                 data = OKXLiveData(
@@ -77,7 +77,8 @@ def run_bot():
                     symbol=symbol,
                     granularity=gran,
                     history_size=config['feed']['history_size'],
-                    use_ws=config['feed'].get('use_ws', True))
+                    realtime_md=config['feed']['realtime_md']
+                )
             data.timeframe_min = gran 
             data.ticker = symbol
             cerebro.adddata(data)

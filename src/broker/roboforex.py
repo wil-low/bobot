@@ -23,7 +23,7 @@ class RStockTrader(BobotBrokerBase):
         self.orders = {}  # Track active orders
         self.instrument_info = {}  # ticker: InstrumentInfo
         self.get_account_info()
-        self.get_order_info()
+        #self.get_order_info()
         self.get_position_info()
         self.is_ready = True
 
@@ -36,7 +36,9 @@ class RStockTrader(BobotBrokerBase):
             self.cash = data['data']['margin']['balance']
             self.equity = data['data']['margin']['equity']
 
-    def get_order_info(self):
+    def get_open_orders(self):
+        self.orders = {}
+        orders = []
         url = f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/orders?status=active"
         response = requests.get(url, headers = self.HEADERS)
         response.raise_for_status()
@@ -45,16 +47,18 @@ class RStockTrader(BobotBrokerBase):
         if data['code'] == 'ok':
             for item in data['data']:
                 o = None
+                data = self.find_data('frx' + item['ticker'])
                 if item['side'] == 'buy':
-                    o = bt.BuyOrder(size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
+                    o = bt.BuyOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
                 else:
-                    o = bt.SellOrder(size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
+                    o = bt.SellOrder(data=data, size=item['volume'], price=item['price'], exectype=bt.Order.Limit, simulated=True)
                 o.ref = item['id']
-                o.ticker = item['ticker']
                 #pos.ref = item['id']
                 #pos.status = item['status']
                 self.orders[o.ref] = o
-                self.log(f"Add order: {o}")
+                orders.append(o)
+                #self.log(f"Add order: {o}")
+        return orders
 
     def get_position_info(self):
         url = f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/deals?"
@@ -65,11 +69,10 @@ class RStockTrader(BobotBrokerBase):
         if data['code'] == 'ok':
             self.positions = {}
             for item in data['data']:
-                pos_size = item['volume']
-                if item['status'] != 'open':
-                    pos_size = 0
-                self.add_position(item['ticker'], item['side'] == 'buy', item['open_price'], pos_size, item['id'])
-                self.log(f"Add position: {item}")
+                if item['status'] == 'open':
+                    pos_size = item['volume']
+                    self.add_position('frx' + item['ticker'], item['side'] == 'buy', item['open_price'], pos_size, item['id'])
+                    self.log(f"Add position: {item}")
 
     def getcash(self):
         return self.cash
@@ -223,21 +226,22 @@ class RStockTrader(BobotBrokerBase):
         return order
 
     def cancel(self, order):
-        response = requests.delete(f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/orders/{order.ref}", headers=self.headers)
+        response = requests.delete(f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/orders/{order.ref}", headers=self.HEADERS)
         if response.status_code == 200:
             del self.orders[order.ref]
             order.cancel()
 
     def cancel_all(self, data):
         symbol = data.ticker
-        for o in self.orders:
+        for o in self.orders.copy().values():
+            print(f"cancel_all: ref {o.ref}")
             if o.data.ticker == symbol:
                 self.cancel(o)
 
     def close_position(self, symbol):
         pos = self.positions.get(symbol, None)
         if pos is not None:
-            response = requests.delete(f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/deals/{pos.ref}", headers=self.headers)
+            response = requests.delete(f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/deals/{pos.ref}", headers=self.HEADERS)
             response.raise_for_status()
             data = response.json()
             self.log(f"close_position: {symbol}, {data}")

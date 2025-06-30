@@ -20,7 +20,7 @@
         "auth": "auth/bybit-testbot.json",
         "history_size": 210,
         "timeframe_min": [60],
-        "use_ws": false,
+        "realtime_md": false,
         "tickers": [
             "BTCUSDT",
             "ETHUSDT",
