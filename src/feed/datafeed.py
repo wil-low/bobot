@@ -82,11 +82,12 @@ class BobotLiveDataBase(bt.feeds.DataBase):
         else:
             print('%-10s,%-3d: %s' % (ticker, tf, txt))
 
-    def __init__(self, logger, symbol, granularity, history_size):
+    def __init__(self, logger, symbol, granularity, history_size, realtime_md):
         self.logger = logger
         self.symbol = symbol
         self.history_size = history_size
         self.granularity = granularity
+        self.realtime_md = realtime_md
         self.md = queue.Queue()
         self._last_candle = None
         self._candle_consumed = True

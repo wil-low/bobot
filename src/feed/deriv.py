@@ -15,14 +15,13 @@ class DerivLiveData(BobotLiveDataBase):
     shared_ws_thread = None
     consumers = {}  # symbol: DerivLiveData
 
-    def __init__(self, logger, app_id, symbol, granularity, history_size, history_only):
-        super().__init__(logger, symbol, granularity, history_size)
+    def __init__(self, logger, app_id, symbol, granularity, history_size, realtime_md):
+        super().__init__(logger, symbol, granularity, history_size, realtime_md)
         self.app_id = app_id
-        self.history_only = history_only
 
     def start(self):
         super().start()
-        self.log(f"DerivLiveData::start")
+        #self.log(f"DerivLiveData::start")
         self._start_ws()
 
     def get_consumer(symbol):
@@ -62,14 +61,14 @@ class DerivLiveData(BobotLiveDataBase):
                     consumer.log(f"Historical candles: {candle_count}")
                     for i in range(candle_count):
                         candle = data['candles'][i]
-                        if self.history_only and i == candle_count - 1:
+                        if not self.realtime_md and i == candle_count - 1:
                             candle['volume'] = 1  # last candle marked as real-time
                         else:
                             candle['volume'] = 0
                         consumer.ohlc['close'] = candle['close']
                         consumer.md.put(candle)
                     consumer.reset_ohlc()
-                    if not self.history_only:
+                    if self.realtime_md:
                         ws.send(json.dumps({
                             "ticks": consumer.symbol,
                             "subscribe": 1

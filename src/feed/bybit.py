@@ -18,10 +18,9 @@ class BybitLiveData(BobotLiveDataBase):
     shared_ws_thread = None
     consumers = {}  # symbol: BybitLiveData
 
-    def __init__(self, logger, symbol, granularity, history_size, use_ws):
-        super().__init__(logger, symbol, granularity, history_size)
+    def __init__(self, logger, symbol, granularity, history_size, realtime_md):
+        super().__init__(logger, symbol, granularity, history_size, realtime_md)
         self.bar = None
-        self.use_ws = use_ws
         #print("BybitLive init")
 
     def start(self):
@@ -118,7 +117,7 @@ class BybitLiveData(BobotLiveDataBase):
                 "high": float(candle[2]),
                 "low": float(candle[3]),
                 "close": float(candle[4]),
-                "volume": float(candle[5]) if not self.use_ws and (i == len(candles) - 1) else 0,
+                "volume": float(candle[5]) if not self.realtime_md and (i == len(candles) - 1) else 0,
             }
             self.last_epoch = c['epoch']
             self.ohlc['close'] = c['close']
@@ -126,7 +125,7 @@ class BybitLiveData(BobotLiveDataBase):
             self.md.put(c)
         self.last_epoch += self.granularity * 60
         #self.log(f"last_epoch: {self.last_epoch}")
-        if self.use_ws:
+        if self.realtime_md:
             self.reset_ohlc()
             self._start_ws()
 
