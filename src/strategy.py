@@ -932,7 +932,7 @@ class TPS(bt.Strategy):
             action.add_limit_order(px, i + 1)
         sl = action.entry_price - action.level * 4 * action.action
         stop_diff = abs(sl * qty - value)
-        tp = action.entry_price + action.level * 4 * action.action  # SL:TP = 1:1
+        tp = action.entry_price + action.level * 2 * action.action  # SL:TP = 2:1
         action.set_sl_tp(sl, tp, stop_diff)
 
     def execute_action(self, action):
