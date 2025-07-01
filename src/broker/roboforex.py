@@ -242,6 +242,7 @@ class RStockTrader(BobotBrokerBase):
                 self.cancel(o)
 
     def close_position(self, symbol):
+        symbol = 'frx' + symbol
         pos = self.positions.get(symbol, None)
         if pos is not None:
             response = requests.delete(f"{RStockTrader.URL}/api/v1/accounts/{self.account_id}/deals/{pos.ref}", headers=self.HEADERS)
