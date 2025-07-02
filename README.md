@@ -1,46 +1,80 @@
-# bobot
-Bot to trade binary options on Deriv
+## 📈 Bobot Trading Framework
 
+`bobot` is a modular Python-based framework for building and executing algorithmic trading strategies. Originally conceived as a binary options bot, it has evolved into a robust system for live and paper trading across multiple brokers and exchanges.
 
-pip install websocket-client loguru pandas matplotlib seaborn plotly nbstripout
+### ⚙️ Key Features
 
-git submodule update --init --recursive
+* 🧠 **Strategy Framework**: Easily develop and plug in strategies using Backtrader.
+* 📊 **Data Handling**: Efficient historical and live data handling via `pandas` and custom adapters.
+* 🤝 **Broker Integrations**:
 
-nbstripout --install
-
-Here’s a general breakdown of the **most active trading times** for major Forex pairs, based on overlapping trading sessions (when liquidity and volatility are usually highest):
-
----
-
-### 🔄 **Trading Sessions (UTC Time)**
-| Session        | Time (UTC)       |
-|----------------|------------------|
-| Sydney         | 10:00 PM – 07:00 AM |
-| Tokyo (Asia)   | 12:00 AM – 09:00 AM |
-| London (Europe)| 08:00 AM – 05:00 PM |
-| New York       | 01:00 PM – 10:00 PM |
+  * ✅ Deriv (binary options)
+  * ✅ Bybit
+  * ✅ OKX
+  * ✅ Roboforex
+* 🧩 **Modular Design**: Clean separation of strategy, execution, and data layers.
+* 🔄 **Live Trading Support**: Real-time execution and portfolio tracking.
+* 💡 **Backtesting Tools**: Use the same codebase to test strategies offline using historical data.
 
 ---
 
-### 🔥 **Most Active Time Ranges by Pair**
+### 📅 Future Improvements
 
-| Forex Pair      | Most Active Time (UTC)                | Best Sessions        |
-|------------------|----------------------------------------|-----------------------|
-| **EUR/USD**      | 01:00 PM – 04:00 PM                    | London + New York    |
-| **GBP/USD**      | 08:00 AM – 04:00 PM                    | London + New York    |
-| **USD/JPY**      | 12:00 AM – 04:00 AM & 01:00 PM – 04:00 PM | Tokyo + New York     |
-| **AUD/USD**      | 10:00 PM – 02:00 AM                    | Sydney + Tokyo       |
-| **NZD/USD**      | 10:00 PM – 02:00 AM                    | Sydney + Tokyo       |
-| **USD/CAD**      | 01:00 PM – 05:00 PM                    | New York             |
-| **EUR/JPY**      | 12:00 AM – 04:00 AM & 08:00 AM – 04:00 PM | Tokyo + London       |
-| **GBP/JPY**      | 12:00 AM – 04:00 AM & 08:00 AM – 04:00 PM | Tokyo + London       |
-| **EUR/GBP**      | 08:00 AM – 05:00 PM                    | London               |
+* [ ] Web UI for monitoring
+* [ ] Strategy parameter tuning engine
+* [ ] More broker support (Binance, Interactive Brokers, etc.)
+* [ ] Portfolio optimization tools
+
+
+## 📊 Alpha Portfolio Management System
+
+This project implements a rules-based portfolio management system inspired by *The Alpha Formula* by Chris Cain, Larry Connors, and Connors Research, LLC. It focuses on systematic daily rebalancing using quantitative allocation strategies.
+
+Unlike the `bobot` project (which executes trades), `alpha` generates **daily allocation recommendations**—indicating which assets to buy or sell—without submitting actual orders. Designed for semi-automated or fully manual execution.
 
 ---
 
-### 🧠 Tips:
-- **Highest volatility** often occurs during session overlaps (e.g., **London/New York**: 01:00 PM – 04:00 PM UTC).
-- Avoid **low-volume hours** (like 08:00 PM – 11:00 PM UTC) unless you’re trading exotic or range strategies.
-- **News events** can create high activity outside normal ranges.
+### 🎯 Key Features
 
-Would you like the same info in your local timezone or tailored for a specific trading strategy (like scalping or swing)?
+* 📈 **Portfolio Allocation Models**:
+
+  * Mean reversion
+  * Momentum
+  * Connors’ multi-factor scoring
+* 🔁 **Daily Rebalancing Logic**:
+
+  * Calculates portfolio weights based on rules
+  * Generates clear buy/sell signals
+* 🗂️ **Asset Universe Flexibility**:
+
+  * Support for stocks, ETFs, indices, and crypto
+* 📝 **Signal Output**:
+
+  * JSON reports with position sizes and recommended trades
+
+---
+
+### 🧠 Strategy Design
+
+Strategies follow a common interface:
+
+* Load historical price data
+* Score and rank assets
+* Determine allocations based on position limits, score thresholds, sector constraints, etc.
+* Generate trades to move from current to target weights
+
+---
+
+### 📅 Future Improvements
+
+* [ ] Web dashboard to visualize allocations
+* [ ] Automated email/slack notifications
+
+---
+
+### 📚 Reference
+
+[The Alpha Formula](https://store.tradingmarkets.com/products/new-the-alpha-formula-high-powered-strategies-to-beat-the-market-with-less-risk) by Chris Cain and Larry Connors
+
+[Connors Research, LLC](https://www.connorsresearch.com)
+
