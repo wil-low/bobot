@@ -13,7 +13,7 @@
         "send_orders": true,
         "cash": 10000,
         "max_loss": 50,
-        "max_positions": 5
+        "max_positions": 3
     },
     "feed": {
         "provider": "Bybit",
