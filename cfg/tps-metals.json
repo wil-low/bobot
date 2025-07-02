@@ -1,0 +1,29 @@
+{
+    "strategy": {
+        "name": "TPS"
+    },
+    "notifier": {
+        "-auth": "auth/tg_channel.json"
+    },
+    "trade": {
+        "log_name": "TPSMetals",
+        "broker": "RStockTrader",
+        "auth": "auth/roboforex.json",
+        "forex_mode": true,
+        "send_signals": true,
+        "send_orders": true,
+        "max_loss": 50,
+        "max_positions": 2
+    },
+    "feed": {
+        "provider": "Deriv",
+        "auth": "auth/deriv.json",
+        "history_size": 210,
+        "realtime_md": false,
+        "timeframe_min": [15],
+        "tickers": [
+            "frxXAGUSD",
+            "frxXAUUSD"
+        ]
+    }
+}
