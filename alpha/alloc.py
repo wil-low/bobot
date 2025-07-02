@@ -17,7 +17,9 @@ class AllocStrategy:
         self.portfolio = portfolio[key]
         self.leverage = portfolio['leverage']
         self.today = today
+        self.rebalance = False
 
+        self.log('')
         self.log(f"========= init =========")
 
         self.tickers = self.get_tickers()
@@ -78,7 +80,7 @@ class AllocStrategy:
             self.log(f"   {ticker}: {close} * {info['qty']} = {value}")
         equity = self.floor2(equity)
         self.compute_cash(self.portfolio, equity)
-        self.allocatable = self.floor2(self.portfolio['equity'] * 0.98 * self.leverage)  # reserve for fees
+        self.allocatable = self.floor2(self.portfolio['equity'] * 0.99 * self.leverage)  # reserve for fees
         self.log(f"equity={self.portfolio['equity']}, cash={self.portfolio['cash']}, allocatable={self.allocatable}")
 
     @staticmethod
@@ -183,7 +185,7 @@ class AllocStrategy:
                 if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
                 if self.key == 'mr' and old_qty == 0:
-                    text += ', record entry price'
+                    text += f", stop {new_tickers[ticker]['stop']}"
                 adds.append({
                     'ticker': ticker,
                     'action': 'buy',
@@ -241,9 +243,8 @@ class RisingAssets(AllocStrategy):
     # Rebalances monthly
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today)
-        self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
-            self.reinvest = True
+            self.rebalance = True
         else:
             # first_working_day of month
             today_date = datetime.strptime(today, '%Y-%m-%d')
@@ -251,12 +252,14 @@ class RisingAssets(AllocStrategy):
             while True:
                 d = datetime(today_date.year, today_date.month, day)
                 if d.weekday() < 5:  # 0=Monday, ..., 4=Friday
-                    self.reinvest = day == today_date.day
+                    self.rebalance = day == today_date.day
                     break
                 day += 1
+        if self.rebalance:
+            self.log(f"trying to rebalance")
 
     def allocate(self):
-        if self.reinvest:
+        if self.rebalance:
             top = []
             for ticker in self.tickers:
                 d = self.data[ticker]
@@ -271,7 +274,7 @@ class RisingAssets(AllocStrategy):
                 daily_return = d.close / d.close.shift(1)
                 volatility = daily_return.rolling(window=63).std()
                 rev_vol = 1 / volatility.iloc[-1]
-                #print(f"{ticker}: {score}, {volatility.iloc[-1]}")
+                self.log(f"{ticker}: score={score:.2f}, rev_vol={rev_vol:.2f}")
                 top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
             
             new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
@@ -283,7 +286,8 @@ class RisingAssets(AllocStrategy):
 
             for item in top_sorted:
                 close = self.data[item['ticker']].close.iloc[-1]
-                alloc_cash = self.allocatable * item['rev_vol'] / vol_sum
+                alloc_perc = item['rev_vol'] / vol_sum
+                alloc_cash = self.allocatable * alloc_perc
                 alloc = alloc_cash / close
                 calc_alloc = alloc
                 if alloc < 1 and alloc > 0.5:
@@ -291,7 +295,7 @@ class RisingAssets(AllocStrategy):
                 else:
                     alloc = int(alloc)
                 value = self.floor2(close * alloc)
-                self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")  #, calculated {calc_alloc}")
+                self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
                 if alloc >= 1:
                     new_portfolio['tickers'][item['ticker']] = {
                         'qty': alloc,
@@ -308,14 +312,15 @@ class DynamicTreasures(AllocStrategy):
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today)
         self.remains = self.tickers[-1]
-        self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
-            self.reinvest = True
+            self.rebalance = True
         else:
-            self.reinvest = datetime.strptime(today, '%Y-%m-%d').weekday() == 0
+            self.rebalance = datetime.strptime(today, '%Y-%m-%d').weekday() == 0
+        if self.rebalance:
+            self.log(f"trying to rebalance")
 
     def allocate(self):
-        if self.reinvest:
+        if self.rebalance:
             top = []
             for ticker in self.tickers:
                 if ticker != self.remains:
@@ -373,6 +378,7 @@ class ETFAvalanches(AllocStrategy):
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today)
         self.remains = self.tickers[-1]
+        self.log(f"trying to rebalance")
 
     def allocate(self):
         top = []
@@ -381,21 +387,21 @@ class ETFAvalanches(AllocStrategy):
             if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                 d = self.data[ticker]
                 if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                    #print(f"{ticker}: negative total return over the past year")
+                    self.log(f"{ticker}: negative total return over the past year")
                     if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
-                        #print(f"{ticker}: negative total return over the past month")
+                        self.log(f"{ticker}: negative total return over the past month")
                         #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
                         rsi = AllocStrategy.compute_rsi(d.close).iloc[-10:]
-                        #print(f"{ticker}: rsi {rsi}")
+                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]}")
                         if rsi.iloc[-1] > 70:
-                            #print(f"{ticker}: rsi {rsi}")
+                            self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
                             entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
                             daily_return = d.close / d.close.shift(1)
                             volatility = daily_return.rolling(window=100).std()
                             top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
-        self.log(f"alloc_slot = {alloc_slot}")
+        self.log(f"alloc_slot = {alloc_slot:.2f}")
 
         new_portfolio = copy.deepcopy(self.portfolio)
         if len(tickers_to_close) > 0:
@@ -472,18 +478,19 @@ class MeanReversion(AllocStrategy):
         self.remains = 'SHY'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
-        self.reinvest = False
         if len(self.portfolio['tickers']) == 0:
-            self.reinvest = True
+            self.rebalance = True
         else:
-            self.reinvest = self.weekday == 0
+            self.rebalance = self.weekday == 0
+        if self.rebalance:
+            self.log(f"trying to rebalance")
 
     def allocate(self):
         trend_d = self.data[self.long_trend_ticker].close
         tickers_to_close = self.to_be_closed()
         new_portfolio = copy.deepcopy(self.portfolio)
         top = []
-        if self.reinvest:  # These rules are checked at the end of the business week
+        if self.rebalance:  # These rules are checked at the end of the business week
             if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
                 self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
                 for ticker in self.tickers:
@@ -507,7 +514,7 @@ class MeanReversion(AllocStrategy):
                 self.log(f"{self.long_trend_ticker} trend is negative: {trend_d.iloc[-1]} < {trend_d.iloc[-21 * 6 - 1]}")
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
-        self.log(f"alloc_slot = {alloc_slot}")
+        self.log(f"alloc_slot = {alloc_slot:.2f}")
 
         new_portfolio = copy.deepcopy(self.portfolio)
         if len(tickers_to_close) > 0:
@@ -649,7 +656,7 @@ class CRSISP500(AllocStrategy):
                     pass
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
-        self.log(f"alloc_slot = {alloc_slot}")
+        self.log(f"alloc_slot = {alloc_slot:.2f}")
 
         new_portfolio = copy.deepcopy(self.portfolio)
         if len(tickers_to_close) > 0:
@@ -742,7 +749,7 @@ class CRSISP500(AllocStrategy):
 
 class TPS(AllocStrategy):
     # Rebalances daily
-    SLOT_COUNT = 5
+    SLOT_COUNT = 2
 
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today, 202)
@@ -783,7 +790,7 @@ class TPS(AllocStrategy):
                 pass
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
-        self.log(f"alloc_slot = {alloc_slot} per lot")
+        self.log(f"alloc_slot = {alloc_slot:.2f} per lot")
 
         new_portfolio = copy.deepcopy(self.portfolio)
         if len(tickers_to_close) > 0:
@@ -868,7 +875,7 @@ class VolPanics(AllocStrategy):
                             top.append({'ticker': ticker, 'rsi': rsi.iloc[-1], 'lots': lots + 1, 'last_px': d.close.iloc[-1]})
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
-        self.log(f"alloc_slot = {alloc_slot} per lot")
+        self.log(f"alloc_slot = {alloc_slot:.2f} per lot")
 
         new_portfolio = copy.deepcopy(self.portfolio)
         if len(tickers_to_close) > 0:
