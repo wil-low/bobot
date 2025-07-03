@@ -10,6 +10,7 @@ import pandas as pd
 
 class AllocStrategy:
     DB_FILE = "work/stock.sqlite"
+    ALLOC_PERCENT = 99.5
 
     def __init__(self, logger, key, portfolio, today, limit=253):
         self.key = key
@@ -80,7 +81,7 @@ class AllocStrategy:
             self.log(f"   {ticker}: {close} * {info['qty']} = {value}")
         equity = self.floor2(equity)
         self.compute_cash(self.portfolio, equity)
-        self.allocatable = self.floor2(self.portfolio['equity'] * 0.99 * self.leverage)  # reserve for fees
+        self.allocatable = self.floor2(self.portfolio['equity'] * self.ALLOC_PERCENT / 100 * self.leverage)  # reserve for fees
         self.log(f"equity={self.portfolio['equity']}, cash={self.portfolio['cash']}, allocatable={self.allocatable}")
 
     @staticmethod
@@ -184,7 +185,7 @@ class AllocStrategy:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
                 if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
-                if self.key == 'mr' and old_qty == 0:
+                if self.key == 'mr' and old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
                 adds.append({
                     'ticker': ticker,
@@ -474,7 +475,7 @@ class MeanReversion(AllocStrategy):
     STOP_SIZE = 5  # percents
 
     def __init__(self, logger, key, portfolio, today):
-        self.long_trend_ticker = 'SPY'
+        self.long_trend_ticker = 'SPLG'
         self.remains = 'SHY'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
@@ -743,7 +744,7 @@ class CRSISP500(AllocStrategy):
         cursor.execute(query)
         rows = cursor.fetchall()
         tickers = [row[0] for row in rows]
-        tickers.append('SPY')  # remains
+        tickers.append('SPLG')  # remains
         return tickers
 
 
