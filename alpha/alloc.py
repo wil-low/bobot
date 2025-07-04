@@ -32,7 +32,7 @@ class AllocStrategy:
                 query = f"""
                 SELECT *
                 FROM (
-                    SELECT date, close, low, high, open
+                    SELECT date, adjClose as close, adjLow as low, adjHigh as high, adjOpen as open
                     FROM prices
                     JOIN tickers ON prices.ticker_id = tickers.id
                     WHERE tickers.symbol = ? AND date < ?
@@ -219,6 +219,11 @@ class AllocStrategy:
         else:
             print('%s: %s' % (self.key, txt))
 
+    def error(self, txt):
+        if self.logger:
+            self.logger.debug('%s: %s' % (self.key, txt))
+        print('%s: %s' % (self.key, txt))
+
     def compute_cash(self, portfolio, prev_equity):
         portfolio['equity'] = prev_equity
         cash = prev_equity
@@ -289,20 +294,17 @@ class RisingAssets(AllocStrategy):
                 close = self.data[item['ticker']].close.iloc[-1]
                 alloc_perc = item['rev_vol'] / vol_sum
                 alloc_cash = self.allocatable * alloc_perc
-                alloc = alloc_cash / close
-                calc_alloc = alloc
-                if alloc < 1 and alloc > 0.5:
-                    alloc = 1
-                else:
-                    alloc = int(alloc)
-                value = self.floor2(close * alloc)
-                self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
+                alloc = self.floor2(alloc_cash / close)
                 if alloc >= 1:
+                    value = self.floor2(close * alloc)
+                    self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
                     new_portfolio['tickers'][item['ticker']] = {
                         'qty': alloc,
                         'close': close,
                         'type': 'market'
                     }
+                else:
+                    self.error(f"{item['ticker']} doesn't fit into alloc ({alloc})")
         else:
             new_portfolio = copy.deepcopy(self.portfolio)
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
@@ -353,6 +355,8 @@ class DynamicTreasures(AllocStrategy):
                             'close': close,
                             'type': 'market'
                         }
+                    else:
+                        self.error(f"{item['ticker']} doesn't fit into alloc ({alloc})")
 
             # remains alloc
             close = self.data[self.remains].close.iloc[-1]
@@ -436,6 +440,7 @@ class ETFAvalanches(AllocStrategy):
                     'type': 'limit'
                 }
             else:
+                self.error(f"{item['ticker']} doesn't fit into alloc ({alloc})")
                 free_slots += 1
         # remains alloc
         close = self.data[self.remains].close.iloc[-1]
@@ -498,12 +503,18 @@ class MeanReversion(AllocStrategy):
                     if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                         try:
                             d = self.data[ticker]
-                            #print(f"{ticker} check")
-                            if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                                if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
+                            close_now = d.close.iloc[-1]
+                            close_year = d.close.iloc[-21 * 12 - 1]
+                            close_month = d.close.iloc[-21 * 1 - 1]
+                            #self.log(f"{ticker} check: {close_now}, year {close_year}, month {close_month}")
+                            if close_month / close_now > 1.5:
+                                self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
+                            if close_now < close_year:  # negative total return over the past year
+                                if close_now < close_month:  # negative total return over the past month
                                     weekly_series = d.close.resample('W').last()
                                     #print(weekly_series)
                                     rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
+                                    #self.log(f"{ticker} passed, rsi {rsi}")
                                     if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
                                         #print(f"allocate {ticker}: rsi {rsi}")
                                         daily_return = d.close / d.close.shift(1)
@@ -537,7 +548,7 @@ class MeanReversion(AllocStrategy):
 
         for item in top_sorted:
             close = self.data[item['ticker']].close.iloc[-1]
-            alloc = int(alloc_slot / close)
+            alloc = self.floor2(alloc_slot / close)
             value = self.floor2(close * alloc)
             self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
             if alloc >= 1:
@@ -549,6 +560,7 @@ class MeanReversion(AllocStrategy):
                     'type': 'market'
                 }
             else:
+                self.error(f"{ticker} doesn't fit into alloc ({alloc})")
                 free_slots += 1
         # remains alloc
         close = self.data[self.remains].close.iloc[-1]
@@ -596,7 +608,7 @@ class MeanReversion(AllocStrategy):
         query = f"""
         SELECT ticker_id, t.symbol
             FROM (
-                SELECT ticker_id, AVG(close * volume) AS avg_dollar_volume
+                SELECT ticker_id, AVG(adjClose * adjVolume) AS avg_dollar_volume
                 FROM prices
                 WHERE date >= DATE(?, 'start of month', '-200 days')
                 GROUP BY ticker_id
