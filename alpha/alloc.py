@@ -476,7 +476,7 @@ class MeanReversion(AllocStrategy):
 
     def __init__(self, logger, key, portfolio, today):
         self.long_trend_ticker = 'SPLG'
-        self.remains = 'SHY'
+        self.remains = 'SPTS'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
         if len(self.portfolio['tickers']) == 0:
