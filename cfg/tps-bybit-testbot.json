@@ -36,6 +36,7 @@
             "NEARUSDT",
             "AVAXUSDT",
             "XLMUSDT",
+            "AAVEUSDT",
             "ATOMUSDT"
         ],
         "-tickers": [
@@ -51,7 +52,6 @@
             "DOTUSDT",
             "UNIUSDT",
             "POLUSDT",
-            "AAVEUSDT",
             "ALGOUSDT",
             "CAKEUSDT",
             "LDOUSDT",
