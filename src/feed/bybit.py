@@ -100,6 +100,7 @@ class BybitLiveData(BobotLiveDataBase):
 
         response = requests.get(url, params=params)
         data = response.json()
+        time.sleep(0.5)
         #self.log(data)
         if data["retCode"] != 0:
             self.log(f"Error fetching data: {data['retMsg']}")
