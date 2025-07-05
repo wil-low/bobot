@@ -22,7 +22,7 @@
         "timeframe_min": [60],
         "realtime_md": false,
         "tickers": [
-            "BTCUSDT",
+            "MKRUSDT",
             "ETHUSDT",
             "XRPUSDT",
             "BNBUSDT",
@@ -40,6 +40,7 @@
             "ATOMUSDT"
         ],
         "-tickers": [
+            "BTCUSDT",
             "LTCUSDT",
             "DASHUSDT",
             "TONUSDT",
@@ -82,7 +83,6 @@
             "TAOUSDT",
             "GALAUSDT",
             "APTUSDT",
-            "MKRUSDT",
             "DYDXUSDT",
             "ETCUSDT",
             "RUNEUSDT",
