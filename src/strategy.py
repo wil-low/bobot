@@ -797,7 +797,7 @@ class TPSAction:
             message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
             message += f"Entry={self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
             for o in self.orders:
-                message += f"\n    x{o['size']} @ {o['price']:.5f}"
+                message += f"\n    ×{o['size']} @ {o['price']:.5f}"
             message += f"\n    SL @ {self.sl:.5f}"
             message += f"\n    TP @ {self.tp:.5f}\n"
         return message
@@ -836,6 +836,7 @@ class TPS(bt.Strategy):
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
         TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
+        self.stages = self.params.trade['stages']
         self.o = {}
         self.sma = {}
         self.rsi = {}
@@ -925,14 +926,20 @@ class TPS(bt.Strategy):
     def add_stages(self, action):
         qty = 1
         value = action.entry_price
-        for i in range(1, 4):
-            px = action.entry_price - action.level * i * action.action
-            value += px * (i + 1)
-            qty += i + 1
-            action.add_limit_order(px, i + 1)
-        sl = action.entry_price - action.level * 4 * action.action
+        sl = None
+        tp = None
+        stop_diff = None
+        for s in self.stages:
+            if s['type'] == 'limit':
+                px = action.entry_price - action.level * s['px_mul'] * action.action
+                value += px * s['qty_mul']
+                qty += s['qty_mul']
+                action.add_limit_order(px, s['qty_mul'])
+            elif s['type'] == 'sl':
+                sl = action.entry_price - action.level * s['px_mul'] * action.action
+            elif s['type'] == 'tp':
+                tp = action.entry_price + action.level * s['px_mul'] * action.action
         stop_diff = abs(sl * qty - value)
-        tp = action.entry_price + action.level * 2 * action.action  # SL:TP = 2:1
         action.set_sl_tp(sl, tp, stop_diff)
 
     def execute_action(self, action):

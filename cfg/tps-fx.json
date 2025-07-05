@@ -13,6 +13,33 @@
         "send_signals": true,
         "send_orders": true,
         "max_loss": 50,
+        "stages": [
+            {
+                "px_mul": 1,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 2,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 3,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 4,
+                "qty_mul": 0,
+                "type": "sl"
+            },
+            {
+                "px_mul": 2,
+                "qty_mul": 0,
+                "type": "tp"
+            }
+        ],
         "max_positions": 5
     },
     "feed": {

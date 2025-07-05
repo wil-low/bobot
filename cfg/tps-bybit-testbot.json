@@ -3,16 +3,43 @@
         "name": "TPS"
     },
     "notifier": {
-        "auth": "auth/tg_channel.json"
+        "-auth": "auth/tg_channel.json"
     },
     "trade": {
         "log_name": "TPSBybitTestbot",
         "broker": "Bybit",
         "auth": "auth/bybit-testbot.json",
         "send_signals": true,
-        "send_orders": true,
+        "send_orders": false,
         "cash": 10000,
         "max_loss": 50,
+        "stages": [
+            {
+                "px_mul": 1,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 2,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 3,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": 4,
+                "qty_mul": 0,
+                "type": "sl"
+            },
+            {
+                "px_mul": 2,
+                "qty_mul": 0,
+                "type": "tp"
+            }
+        ],
         "max_positions": 3
     },
     "feed": {
