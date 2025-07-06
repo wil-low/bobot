@@ -55,6 +55,7 @@ class BybitBroker(BobotBrokerBase):
         # If the request fails (404) then print the error.
         except requests.exceptions.HTTPError as error:
             self.logger.error(error)
+        time.sleep(0.5)
         return json_data
 
     def make_signature(self, payload):
