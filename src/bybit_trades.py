@@ -38,7 +38,8 @@ def bybit_trades():
         bot_token=None,
         channel_id=None,
         api_key=broker_auth['api_key'],
-        api_secret=broker_auth['api_secret']
+        api_secret=broker_auth['api_secret'],
+        tickers={}
     )
 
     while not broker.ready():
