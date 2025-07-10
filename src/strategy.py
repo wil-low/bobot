@@ -812,7 +812,6 @@ class TPS(bt.Strategy):
         ('short_exit', 30),
         ('atr_multiplier', 0.5),
         ('min_atr_to_sma', 4),
-        ('profit_loss_ratio', 0.5),
         ('logger', None),
     )
 
@@ -1060,17 +1059,8 @@ class TPS(bt.Strategy):
                 elif not self.params.trade['send_orders']:
                     check_close_by_rsi = True
             else:
-                if TPSAction.FOREX_MODE:
-                    check_close_by_rsi = True
-                else:
-                    # position exists, compute UPnL
-                    upnl = (d.close[0] - p.price) * p.size
-                    self.log(d, f"upnl={upnl:.3f}")
-                    if upnl > TPSAction.MAX_LOSS * self.params.profit_loss_ratio:
-                        action.action = TPSAction.CLOSE
-                        action.rsi = -1
-                    else:
-                        check_close_by_rsi = True
+                check_close_by_rsi = True
+
             # check for close
             if check_close_by_rsi:
                 if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
