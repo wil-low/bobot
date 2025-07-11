@@ -50,19 +50,20 @@
         "timeframe_min": [60],
         "tickers": [
             "frxGBPJPY",
-            "frxEURGBP",
             "frxEURAUD",
             "frxGBPCHF",
             "frxNZDJPY",
-            "frxEURUSD",
             "frxGBPUSD",
             "frxAUDUSD",
+            "frxAUDNZD",
             "frxNZDUSD",
-            "frxUSDCAD",
             "frxUSDCHF",
             "frxUSDJPY"
         ],
         "-tickers": [
+            "frxUSDCAD",
+            "frxEURUSD",
+            "frxEURGBP",
             "frxXAGUSD",
             "frxXAUUSD"
         ]
