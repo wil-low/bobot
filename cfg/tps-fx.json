@@ -12,7 +12,7 @@
         "forex_mode": true,
         "send_signals": true,
         "send_orders": true,
-        "max_loss": 50,
+        "max_loss": 10,
         "stages": [
             {
                 "px_mul": 1,

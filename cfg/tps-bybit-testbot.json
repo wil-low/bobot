@@ -12,7 +12,7 @@
         "send_signals": true,
         "send_orders": true,
         "cash": 10000,
-        "max_loss": 50,
+        "max_loss": 10,
         "stages": [
             {
                 "px_mul": 1,
