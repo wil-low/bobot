@@ -1190,3 +1190,138 @@ class CRSISP500(bt.Strategy):
             self.log(d, "%s: free slots %d" % (d.datetime.datetime(0).isoformat(), free_slots))
         else:
             raise ValueError("free_slots < 0")
+
+
+class GoldScalping(bt.Strategy):
+    params = (
+        ('trade', {}),
+        ('enable_short', True),
+        ('ma_period', 200),
+        ('rsi_period', 4),
+        ('rsi_long_1st', 30),
+        ('rsi_long_2nd', 25),
+        ('rsi_short_1st', 70),
+        ('rsi_short_2nd', 75),
+        ('logger', None),
+        ('leverage', None),
+        ('min_hour', 13), #10),
+        ('max_hour', 16), #21),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        dt = dt or self.data.datetime.date(0)
+        if self.params.logger:
+            self.params.logger.debug('%-10s: %s' % (data.ticker, txt))
+        else:
+            print('%-10s: %s' % (data.ticker, txt))
+
+    def __init__(self):
+        # To keep track of pending orders and buy price/commission
+        self.o = {}
+        param_dict = dict(self.params._getitems())
+        json_params = json.dumps(param_dict)
+        self.params.logger.debug(f"Strategy params: {json_params}")
+
+        d = self.datas[0]
+        self.ema200 = bt.indicators.ExponentialMovingAverage(d, period=200)
+        self.ema20 = bt.indicators.ExponentialMovingAverage(d, period=20)
+        self.ema5 = bt.indicators.ExponentialMovingAverage(d, period=5)
+        self.macd = bt.indicators.MACD(d)
+        self.psar = bt.indicators.ParabolicSAR(d)
+
+    def notify_order(self, order):
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f' %
+                    (order.executed.price,
+                    order.executed.value,
+                    order.executed.comm))
+
+            else:  # Sell
+                self.log(order.data, 'SELL EXECUTED, Price: %.6f, Cost: %.2f, Comm %.2f' %
+                        (order.executed.price,
+                        order.executed.value,
+                        order.executed.comm))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+                 (trade.pnl, trade.pnlcomm))
+
+    def next(self):
+        #if self.broker.getcash() < self.params.trade['stake']:
+        #    return
+        # Simply log the closing price of the series from the reference
+        d = self.datas[0]
+        if d.datetime.datetime(0).hour < self.params.min_hour or d.datetime.datetime(0).hour >= self.params.max_hour:
+            return
+        #self.log(d, '%s: Close: %.6f, EMA5 %.6f, EMA200 %.2f' % (d.datetime.datetime(0).isoformat(), d.close[0], self.ema5[d][0], self.ema200[d][0]))
+
+        pos = self.getposition(d)
+        #self.log(f"Position: {pos}")
+
+        # Check if we are in the market
+        if pos.size == 0:
+            entry_up = False
+            entry_dn = False
+            if d.close[0] > self.ema200[0]:  # Estaremos por encima de la EMA de 200
+                ema_check = False
+                # El precio cruza por debajo la EMA de 20 de las Bandas de Bollinger
+                if d.close[-1] < self.ema20[-1] and d.close[0] > self.ema20[0]:
+                    ema_check = True
+                # o la EMA de 5 cruza por debajo a la EMA de 20
+                elif self.ema5[-1] < self.ema20[-1] and self.ema5[0] > self.ema20[0]:
+                    ema_check = True
+                # En el Macd, la línea Macd cruza desde abajo la línea de señal
+                macd_check = self.macd.macd[-1] < self.macd.signal[-1] and self.macd.macd[0] > self.macd.signal[0]
+                # El Parabolic Sar acaba de revertirse y se sitúa por debajo del precio
+                psar_check = d.close[-1] < self.psar[-1] and d.close[0] > self.psar[0]
+                entry_up = ema_check and macd_check and psar_check
+            else:  # Estaremos preferiblemente por debajo de la EMA de 200
+                ema_check = False
+                # El precio cruza por encima la EMA de 20 de las Bandas de Bollinger
+                if d.close[-1] > self.ema20[-1] and d.close[0] < self.ema20[0]:
+                    ema_check = True
+                # o la EMA de 5 cruza por encima a la EMA de 20
+                elif self.ema5[-1] > self.ema20[-1] and self.ema5[0] < self.ema20[0]:
+                    ema_check = True
+                # En el Macd la línea Macd cruza desde arriba la línea de señal
+                macd_check = self.macd.macd[-1] > self.macd.signal[-1] and self.macd.macd[0] < self.macd.signal[0]
+                # El Parabolic Sar acaba de revertirse y se sitúa por encima del precio
+                psar_check = d.close[-1] > self.psar[-1] and d.close[0] < self.psar[0]
+                entry_up = ema_check and macd_check and psar_check
+
+            if entry_up or entry_dn:
+                self.log(d, '%s: Close: %.6f, EMA5 %.6f, EMA200 %.2f' % (d.datetime.datetime(0).isoformat(), d.close[0], self.ema5[0], self.ema200[0]))
+                self.send_order(d, entry_dn)
+
+
+    def send_order(self, data, is_sell):
+        side = 'BUY'
+        if is_sell:
+            side = 'SELL'
+        size = self.params.trade['stake']
+        sl_diff = 0.100
+        tp_diff = 0.50
+        
+        if is_sell:
+            [order, order_sl, order_tp] = self.sell_bracket(data=data, size=size, exectype=bt.Order.Market, stopprice=data.close[0] + sl_diff, limitprice=data.close[0] - tp_diff)
+        else:
+            [order, order_sl, order_tp] = self.buy_bracket(data=data, size=size, exectype=bt.Order.Market, stopprice=data.close[0] - sl_diff, limitprice=data.close[0] + tp_diff)
+        self.log(data, '%s CREATE, %.2f at %.6f, sl %.6f, tp %.6f\n' % (side, size, order.created.price, order_sl.created.price, order_tp.created.price))

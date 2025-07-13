@@ -16,7 +16,7 @@ import backtrader as bt
 
 from broker.bo import BinaryOptionsBroker
 from feed.datafeed import HistDataCSVData, SQLiteData, TiingoCSVData
-from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort
+from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort, GoldScalping
 from strategy_stat import CointegratedPairs, MarketNeutral
 from formulaic import AlphaCombination
 
@@ -71,7 +71,8 @@ def run_bot():
     logger.info("Starting strategy for backtest")
 
     config_tmp = config.copy()
-    del config_tmp['auth']
+    if 'auth' in config_tmp:
+        del config_tmp['auth']
     logger.debug(f"Config params: {config_tmp}")
 
     cerebro = bt.Cerebro()
@@ -86,16 +87,16 @@ def run_bot():
                 data = HistDataCSVData(
                     dataname=f'datasets/histdata/DAT_ASCII_{symbol}_M1_{config['feed']['year']}.csv',
                     # Do not pass values before this date
-                    #fromdate=datetime.datetime(2005, 1, 1),
+                    #fromdate=datetime(2022, 1, 4, 9),
                     # Do not pass values after this date
-                    #todate=datetime(2023, 2, 27),
+                    #todate=datetime(2022, 1, 4, 16),
                 )
             elif config['feed']['provider'] == "TiingoS":  # stocks
                 fn = f'datasets/tiingo/{symbol}.csv'
                 data = TiingoCSVData(
                     dataname=fn,
                     # Do not pass values before this date
-                    #fromdate=datetime.datetime(2005, 1, 1),
+                    #fromdate=datetime(2005, 1, 1),
                     # Do not pass values after this date
                     #todate=datetime(2023, 2, 27),
                 )
@@ -104,7 +105,7 @@ def run_bot():
                 data = HistDataCSVData(
                     dataname=fn,
                     # Do not pass values before this date
-                    #fromdate=datetime.datetime(2005, 1, 1),
+                    #fromdate=datetime(2005, 1, 1),
                     # Do not pass values after this date
                     #todate=datetime(2023, 2, 27),
                 )
@@ -126,7 +127,7 @@ def run_bot():
             #else:
             cerebro.resampledata(data, timeframe=timeframe, compression=compression)
 
-    if config['trade']['broker'] == "BO":
+    if config['trade'].get('broker', None) == "BO":
         broker = BinaryOptionsBroker(
             logger=logger,
             bot_token=config['auth']['bot_token'],
@@ -160,6 +161,8 @@ def run_bot():
         cerebro.addstrategy(TPS, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'CRSISP500':
         cerebro.addstrategy(CRSISP500, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'GoldScalping':
+        cerebro.addstrategy(GoldScalping, logger=logger, trade=config['trade'])
     else:
         raise NotImplementedError(config["strategy"]["name"])
 

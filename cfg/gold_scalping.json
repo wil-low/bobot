@@ -1,0 +1,25 @@
+{
+    "strategy": {
+        "name": "GoldScalping"
+    },
+    "notifier": {
+        "-auth": "auth/tg_channel.json"
+    },
+    "trade": {
+        "log_name": "Gold",
+        "cash": 1000,
+        "stake": 1,
+        "leverage": 500
+    },
+    "feed": {
+        "provider": "HistData",
+        "auth": "",
+        "history_size": 210,
+        "realtime_md": false,
+        "year": 2022,
+        "timeframe_min": [1],
+        "tickers": [
+            "XAUUSD"
+        ]
+    }
+}
