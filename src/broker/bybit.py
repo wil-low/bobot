@@ -18,6 +18,8 @@ class BybitBroker(BobotBrokerBase):
     DEMO_URL = "https://api-demo.bybit.com"
     #MAIN_URL = "https://api.bybit.nl"
 
+    TRADE_HISTORY_PERIOD_MS = 5 * 24 * 60 * 60 * 1000  # 5 days
+
     def __init__(self, logger, bot_token, channel_id, api_key, api_secret, tickers):
         super().__init__(logger, 0, bot_token, channel_id, tickers)
         self.cash = 10000.0  # initial virtual balance
@@ -341,26 +343,31 @@ class BybitBroker(BobotBrokerBase):
         self.is_ready = False
         self.trades = []
         self.trades_offset = 0
-        self.trades_from = date_from
-        self.trades_to = date_to
         cursor = None
+        startTime = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp() * 1000)
+        endTime = int(datetime.strptime(date_to, "%Y-%m-%d").timestamp() * 1000)
         while True:
-            cursor = self.get_trades_chunk(cursor)
+            end_time = min(startTime + self.TRADE_HISTORY_PERIOD_MS, endTime)
+            cursor = self.get_trades_chunk(cursor, startTime, end_time)
             print(cursor)
             if not cursor:
-                break 
+                if end_time < endTime:
+                    startTime += self.TRADE_HISTORY_PERIOD_MS
+                else:
+                    break
         self.write_trades_csv()
 
-    def get_trades_chunk(self, cursor):
-        startTime = int(datetime.strptime(self.trades_from, "%Y-%m-%d").timestamp() * 1000)
-        params = f"category=linear&limit=100&startTime={startTime}"
+    def get_trades_chunk(self, cursor, start_time, end_time):
+        params = f"category=linear&limit=100&startTime={start_time}&endTime={end_time}"
         if cursor is not None:
             params += f"&cursor={cursor}"
         response = self.http_request('/v5/position/closed-pnl', 'GET', params, False)
+        #print(f"get_trades_chunk: {len(response['result']['list'])}")
         self.trades += response['result']['list']
         return response['result']['nextPageCursor']
 
     def write_trades_csv(self):
+        self.trades = sorted(self.trades, key=lambda x: int(x["createdTime"]))
         # Convert Unix timestamps to human-readable format
         for trade in self.trades:
             trade["createdTime"] = datetime.fromtimestamp(float(trade["createdTime"]) / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')

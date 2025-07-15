@@ -1,5 +1,6 @@
 # bybit_trades.py
 
+import argparse
 import json
 import os
 import sys
@@ -21,11 +22,11 @@ def read_config(fn):
         config = json.load(f)
     return config
 
-def bybit_trades():
-    config = read_config(sys.argv[1])
+def bybit_trades(args):
+    config = read_config(args.config)
 
-    date_from = sys.argv[2]
-    date_to = sys.argv[3]
+    date_from = args.start_date
+    date_to = args.end_date
 
     logger.info("")
     logger.info("Starting bybit_trades")
@@ -51,4 +52,10 @@ def bybit_trades():
         time.sleep(0.5)
 
 if __name__ == '__main__':
-    bybit_trades()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", "-c", required=True, help='config file name')
+    parser.add_argument("--start_date", "-s", required=True, help='start date in format YYYY-MM-DD')
+    parser.add_argument("--end_date", "-e", required=True, help='end date in format YYYY-MM-DD')
+    args = parser.parse_args()
+
+    bybit_trades(args)
