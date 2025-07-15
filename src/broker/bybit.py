@@ -34,6 +34,7 @@ class BybitBroker(BobotBrokerBase):
             'Content-Type': 'application/json'
         }
         self.is_ready = False
+        self.has_bracket = False
         self.instrument_info = {}  # ticker: InstrumentInfo
         self.get_account_info()
         self._connect()
@@ -351,7 +352,7 @@ class BybitBroker(BobotBrokerBase):
         self.write_trades_csv()
 
     def get_trades_chunk(self, cursor):
-        startTime = int(datetime.strptime(self.trades_from, "%Y%m%d %H%M%S").timestamp() * 1000)
+        startTime = int(datetime.strptime(self.trades_from, "%Y-%m-%d").timestamp() * 1000)
         params = f"category=linear&limit=100&startTime={startTime}"
         if cursor is not None:
             params += f"&cursor={cursor}"
