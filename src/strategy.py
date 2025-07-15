@@ -738,6 +738,7 @@ class TPSAction:
     LONG = 1
     SHORT = -1
     CLOSE = 0
+    NONE = CLOSE
 
     FOREX_MODE = False
     MAX_LOSS = None  # in USD
@@ -835,6 +836,7 @@ class TPS(bt.Strategy):
         TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
+        self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
         self.stages = self.params.trade['stages']
         self.o = {}
         self.sma = {}
@@ -983,22 +985,22 @@ class TPS(bt.Strategy):
             self.actions[0][ticker] = action
         if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
             # data for every ticker arrived
-            if self.params.trade['send_orders']:
-                # select best LONG/SHORT actions by largest atr%
-                # count positions
-                pos_count = 0
-                for d in self.datas:
-                    if self.getposition(d).size != 0:
-                        pos_count += 1
-                free_slots = self.max_positions - pos_count + len(self.actions[1])
-                self.log(action.data, f"free_slots: {self.max_positions} - {pos_count} + {len(self.actions[1])} = {free_slots}")
-                open_actions = sorted(self.actions[0].items(), key=lambda item: item[1].volatility, reverse=True)[:free_slots]
-                for _, a in self.actions[1].items():  # close
-                    #self.log(action.data, f"execute open")
-                    self.execute_action(a)
-                for _, a in open_actions:
-                    #self.log(a.data, f"execute close")
-                    self.execute_action(a)
+
+            # counters for long and short entry actions
+            entry_count = {
+                TPSAction.LONG: 0,
+                TPSAction.SHORT: 0
+            }
+            for act in self.actions[0].values():
+                entry_count[act.action] += 1
+
+            restrict_direction = TPSAction.NONE
+            if entry_count[TPSAction.LONG] >= self.signal_cluster_threshold:
+                restrict_direction = TPSAction.LONG
+            elif entry_count[TPSAction.SHORT] >= self.signal_cluster_threshold:
+                restrict_direction = TPSAction.SHORT
+
+            #print(f"restrict_trading: {restrict_direction}, entry_count={entry_count}")
 
             if self.params.trade['send_signals']:
                 part_num = 0
@@ -1017,6 +1019,31 @@ class TPS(bt.Strategy):
                             post = f"#{part_num} {self.POST_HEADERS[i]}\n"
                     if len(post) > 0:
                         self.broker.post_message(post)
+                
+                if restrict_direction != TPSAction.NONE:
+                    part_num += 1
+                    dir = 'LONG' if restrict_direction == TPSAction.LONG else 'SHORT'
+                    self.broker.post_message(f"#{part_num} ⚠️ Strong trending or panic conditions: don't open {dir} positions")
+                    #self.broker.post_message(f"#{part_num} ⚠️ Strong trending or panic conditions: don't open {dir} positions, close {dir} ones ❌")
+
+            if self.params.trade['send_orders']:
+                # select best LONG/SHORT actions by largest atr%
+                # count positions
+                pos_count = 0
+                for d in self.datas:
+                    if self.getposition(d).size != 0:
+                        pos_count += 1
+                free_slots = self.max_positions - pos_count + len(self.actions[1])
+                self.log(action.data, f"free_slots: {self.max_positions} - {pos_count} + {len(self.actions[1])} = {free_slots}")
+                filtered_actions = filter(lambda item: item[1].action != restrict_direction, self.actions[0].items())
+                open_actions = sorted(filtered_actions, key=lambda item: item[1].volatility, reverse=True)[:free_slots]
+                for _, a in self.actions[1].items():  # close
+                    #self.log(action.data, f"execute open")
+                    self.execute_action(a)
+                for _, a in open_actions:
+                    #self.log(a.data, f"execute close")
+                    self.execute_action(a)
+
             self.last_sent_timestamp = timestamp
             self.actions = [{}, {}]
 
