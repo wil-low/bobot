@@ -14,6 +14,7 @@ class BinaryOptionsBroker(BobotBrokerBase):
         self.contract_expiration_min = contract_expiration_min
         self.open_contracts = []
         self.csv_file = csv_file
+        self.has_bracket = False
 
         # Initialize CSV file with header if it doesn't exist
         self._initialize_csv()

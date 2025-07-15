@@ -139,8 +139,11 @@ def run_bot():
     else:
         cerebro.broker.setcash(config['trade']['cash'])
         cerebro.broker.set_slippage_perc(0.0003)
-        cerebro.broker.setcommission(commission=0, leverage=config['trade']['leverage'])
+        cerebro.broker.setcommission(commtype=bt.CommInfoBase.COMM_PERC, commission=0.00055, leverage=config['trade']['leverage'])
         cerebro.broker.post_message = lambda msg: 1
+        cerebro.broker.get_open_orders = lambda: []
+        cerebro.broker.register_ticker = lambda ticker: 1
+        cerebro.broker.has_bracket = True
 
     # Add strategy
     if config["strategy"]["name"] == 'RSIPowerZones':
@@ -192,8 +195,12 @@ def run_bot():
 
     logged_print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
     
-    if len(config["feed"]["tickers"]) < 10:
-        cerebro.plot(style='candle', barup='green', bardown='red', volume=False)
+    s = result[0]
+    if hasattr(s, 'pnl_correction'):
+        logged_print(f"Corrected final value: {(cerebro.broker.getvalue() + s.pnl_correction):.2f}, correction for stops: {s.pnl_correction:.2f}")
+
+    #if len(config["feed"]["tickers"]) < 10:
+    #    cerebro.plot(style='candle', barup='green', bardown='red', volume=False)
 
 if __name__ == '__main__':
     run_bot()
