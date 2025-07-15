@@ -40,6 +40,7 @@
                 "type": "tp"
             }
         ],
+        "min_atr_to_sma": 4,
         "max_positions": 3
     },
     "feed": {
