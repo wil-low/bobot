@@ -42,7 +42,7 @@
         ],
         "min_atr_to_sma": 4,
         "signal_cluster_threshold": 8,
-        "max_positions": 5
+        "max_positions": 8
     },
     "feed": {
         "provider": "Bybit",
