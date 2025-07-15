@@ -103,7 +103,7 @@ class BybitLiveData(BobotLiveDataBase):
         time.sleep(0.5)
         #self.log(data)
         if data["retCode"] != 0:
-            self.log(f"Error fetching data: {data['retMsg']}")
+            self.log(f"Error fetching data: {data['retMsg']}, headers={response.headers}")
             return
 
         self.log(f"Historical candles: {len(data['result']['list'])}")
