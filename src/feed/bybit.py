@@ -98,14 +98,20 @@ class BybitLiveData(BobotLiveDataBase):
             "limit": str(self.history_size)
         }
 
-        response = requests.get(url, params=params)
-        data = response.json()
-        time.sleep(0.5)
-        #self.log(data)
-        if data["retCode"] != 0:
-            self.log(f"Error fetching data: {data['retMsg']}, headers={response.headers}")
-            return
+        attempt_count = 0
+        while attempt_count < 5:
+            response = requests.get(url, params=params)
+            data = response.json()
+            attempt_count += 1
+            #self.log(data)
+            code = data["retCode"]
+            if code != 0:
+                self.log(f"Error fetching data: code={code}, {data['retMsg']}, headers={response.headers}, retrying...")
+                time.sleep(5)
+            else:
+                break
 
+        time.sleep(0.5)
         self.log(f"Historical candles: {len(data['result']['list'])}")
 
         candles = list(reversed(data['result']['list'][1:]))  # skip latest candle
