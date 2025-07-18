@@ -1066,7 +1066,7 @@ class TPS(bt.Strategy):
                 if restrict_direction != TPSAction.NONE:
                     part_num += 1
                     dir = 'LONG' if restrict_direction == TPSAction.LONG else 'SHORT'
-                    self.broker.post_message(f"#{part_num} ⚠️ Strong trending or panic conditions: don't open {dir} positions, close {dir} ones ❌")
+                    self.broker.post_message(f"#{part_num} ⚠️ Strong trending or panic conditions:\n\nClose {dir} positions ❌")
                     stay_out = True
 
             if self.params.trade['send_orders']:
