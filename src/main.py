@@ -23,7 +23,7 @@ from feed.deriv import DerivLiveData
 from feed.okx import OKXLiveData
 from feed.bybit import BybitLiveData
 
-from strategy import TPS, Anty, KissIchimoku, RSIPowerZones
+from strategy import TPS, Anty, KissIchimoku, RSIPowerZones, MPS
 from strategy_stat import CointegratedPairs, MarketNeutral
 
 def read_config(fn):
@@ -156,6 +156,8 @@ def run_bot():
         cerebro.addstrategy(MarketNeutral, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'TPS':
         cerebro.addstrategy(TPS, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'MPS':
+        cerebro.addstrategy(MPS, logger=logger, trade=config['trade'])
     else:
         raise NotImplementedError(config["strategy"]["name"])
 

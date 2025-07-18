@@ -16,7 +16,7 @@ import backtrader as bt
 
 from broker.bo import BinaryOptionsBroker
 from feed.datafeed import HistDataCSVData, SQLiteData, TiingoCSVData
-from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort, GoldScalping
+from strategy import CRSISP500, TPS, Anty, KissIchimoku, RSIPowerZones, CRSIShort, GoldScalping, MPS, APlusB
 from strategy_stat import CointegratedPairs, MarketNeutral
 from formulaic import AlphaCombination
 
@@ -166,6 +166,10 @@ def run_bot():
         cerebro.addstrategy(CRSISP500, logger=logger, trade=config['trade'])
     elif config["strategy"]["name"] == 'GoldScalping':
         cerebro.addstrategy(GoldScalping, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'MPS':
+        cerebro.addstrategy(MPS, logger=logger, trade=config['trade'])
+    elif config["strategy"]["name"] == 'APlusB':
+        cerebro.addstrategy(APlusB, logger=logger, trade=config['trade'])
     else:
         raise NotImplementedError(config["strategy"]["name"])
 

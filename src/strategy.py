@@ -5,6 +5,7 @@ import json
 import backtrader as bt
 from indicators.connorsrsi import ConnorsRSI
 from indicators.hv import HistoricalVolatility
+from indicators.return_volatility import ReturnVolatility
 
 class Anty(bt.Strategy):
     params = (
@@ -783,8 +784,8 @@ class TPSAction:
             result = self.MAX_LOSS / self.stop_diff
         return result
 
-    def add_limit_order(self, price, size):
-        o = {'price': price, 'size': size}
+    def add_order(self, price, size, type):
+        o = {'price': price, 'size': size, 'type': type}
         self.orders.append(o)
 
     def get_message(self):
@@ -943,7 +944,10 @@ class TPS(bt.Strategy):
                 px = action.entry_price - action.level * s['px_mul'] * action.action
                 value += px * s['qty_mul']
                 qty += s['qty_mul']
-                action.add_limit_order(px, s['qty_mul'])
+                action.add_order(px, s['qty_mul'], 'limit')
+            elif s['type'] == 'stop':
+                px = action.entry_price + action.level * s['px_mul'] * action.action
+                action.add_order(px, s['qty_mul'], 'stop')
             elif s['type'] == 'sl':
                 sl = action.entry_price - action.level * s['px_mul'] * action.action
             elif s['type'] == 'tp':
@@ -966,14 +970,357 @@ class TPS(bt.Strategy):
                     else:
                         self.buy(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
                     for o in action.orders:
-                        self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        if o['type'] == 'limit':
+                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        else:
+                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
                 elif action.action == TPSAction.SHORT:
                     if self.broker.has_bracket:
                         self.sell_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
                     else:
                         self.sell(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
                     for o in action.orders:
-                        self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        if o['type'] == 'limit':
+                            self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        else:
+                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
+
+    def add_action(self, action):
+        ticker = action.data.ticker
+        timestamp = action.data.datetime.datetime(0)
+        self.ticker_timestamps[ticker] = timestamp
+        if action.action == TPSAction.CLOSE:
+            self.actions[1][ticker] = action
+        elif action.action is not None:
+            self.actions[0][ticker] = action
+        if self.last_sent_timestamp != timestamp and all(self.ticker_timestamps[t] and self.ticker_timestamps[t] == timestamp for t in self.ticker_timestamps):
+            # data for every ticker arrived
+
+            # counters for long and short entry actions
+            entry_count = {
+                TPSAction.LONG: 0,
+                TPSAction.SHORT: 0
+            }
+            for act in self.actions[0].values():
+                entry_count[act.action] += 1
+
+            restrict_direction = TPSAction.NONE
+            if entry_count[TPSAction.LONG] >= self.signal_cluster_threshold:
+                restrict_direction = TPSAction.LONG
+            elif entry_count[TPSAction.SHORT] >= self.signal_cluster_threshold:
+                restrict_direction = TPSAction.SHORT
+
+            #print(f"restrict_trading: {restrict_direction}, entry_count={entry_count}")
+
+            stay_out = False
+
+            if self.params.trade['send_signals']:
+                part_num = 0
+                for i, act in enumerate(self.actions):
+                    part_num += 1
+                    post = f"#{part_num} {self.POST_HEADERS[i]}\n"
+                    for k in sorted(self.ticker_timestamps.keys()):
+                        a = act.get(k, None)
+                        if a is not None:
+                            message = act[k].get_message()
+                            if message is not None:
+                                post += f"\n{message}"
+                        if len(post) > 2048:
+                            self.broker.post_message(post)
+                            part_num += 1
+                            post = f"#{part_num} {self.POST_HEADERS[i]}\n"
+                    if len(post) > 0:
+                        self.broker.post_message(post)
+                
+                if restrict_direction != TPSAction.NONE:
+                    part_num += 1
+                    dir = 'LONG' if restrict_direction == TPSAction.LONG else 'SHORT'
+                    self.broker.post_message(f"#{part_num} ⚠️ Strong trending or panic conditions: don't open {dir} positions, close {dir} ones ❌")
+                    stay_out = True
+
+            if self.params.trade['send_orders']:
+                # count positions
+                pos_count = 0
+                for d in self.datas:
+                    if self.getposition(d).size != 0:
+                        pos_count += 1
+                if stay_out:
+                    # close counter-trend positions
+                    for d in self.datas:
+                        pos_size = self.getposition(d).size
+                        if pos_size != 0 and ((pos_size > 0) == (restrict_direction == TPSAction.LONG)):
+                            self.close(d, reduceOnly=True)
+                            self.cancel_all(d)
+                            pos_count -= 1
+
+                # select best LONG/SHORT actions by largest atr%
+                free_slots = self.max_positions - pos_count + len(self.actions[1])
+                self.log(action.data, f"free_slots: {self.max_positions} - {pos_count} + {len(self.actions[1])} = {free_slots}")
+                filtered_actions = filter(lambda item: item[1].action != restrict_direction, self.actions[0].items())
+                open_actions = sorted(filtered_actions, key=lambda item: item[1].volatility, reverse=True)[:free_slots]
+                for _, a in self.actions[1].items():  # close
+                    #self.log(action.data, f"execute open")
+                    self.execute_action(a)
+                for _, a in open_actions:
+                    #self.log(a.data, f"execute close")
+                    self.execute_action(a)
+
+            self.last_sent_timestamp = timestamp
+            self.actions = [{}, {}]
+
+    def cancel_all(self, data):
+        if hasattr(self.broker, 'cancel_all'):
+            self.broker.cancel_all(data)
+        else:
+            for _, o in self.orders.get(data, {}).items():
+                if o.alive():
+                    self.log(data, f"Cancel order {str(o)}")
+                    self.cancel(o)
+            self.orders[data] = {}
+
+    def next(self):
+        for d in self.datas:
+            if TPSAction.FOREX_MODE:
+                t = d.ticker.replace('frx', '')
+                #print(f"{t}.find('USD')")
+                usd_pos = t.find('USD')
+                if usd_pos == 0:  # USDxxx
+                    currency = t[3:]
+                    TPSAction.usd_rates[currency] = 1 / d.close[0]
+                    #print(f"TPSAction.usd_rates[{currency}] = {TPSAction.usd_rates[currency]}")
+                elif usd_pos == 3:  # xxxUSD
+                    currency = t[0:3]
+                    TPSAction.usd_rates[currency] = d.close[0]
+                    #print(f"TPSAction.usd_rates[{currency}] = {TPSAction.usd_rates[currency]}")
+                elif usd_pos != -1:  # cross pair
+                    raise KeyError(f"usd_rates: Wrong place for USD in ticker '{t}")
+
+            if d.volume == 0:
+                continue
+            
+            level = self.atr[d].atr[0] * self.params.atr_multiplier
+            levels2sma = abs(d.close[0] - self.sma[d].sma[0]) / level
+            volatility = level / d.close[0] * 100
+            self.log(d, f"{d.datetime.datetime(0).isoformat()}: c {d.close[0]:.5f}, sma {self.sma[d].sma[0]:.5f}, rsi {self.rsi[d].rsi[0]:.5f}, atr={volatility:.2f}%, to_sma={levels2sma:.2f}")
+
+            p = self.getposition(d)
+            if self.params.trade['send_orders']:
+                old_pos_size = self.position_sizes.get(d.ticker, 0)
+                self.position_sizes[d.ticker] = p.size
+                if old_pos_size != 0 and p.size == 0:
+                    # position closed by SL or TP, cancel orders
+                    self.log(d, f"position (old_size {old_pos_size}) closed by SL/TP, cancel orders if any")
+                    self.cancel_all(d)
+                    continue  # skip entry/exit checks this time
+
+            above_sma = d.close[0] > self.sma[d].sma[0]
+            check_close_by_rsi = False
+            action = TPSAction(d)
+            if p.size == 0:
+                # no position
+                if above_sma and self.rsi[d].rsi[-1] < self.params.long_entry and self.rsi[d].rsi[0] < self.params.long_entry and levels2sma > self.min_atr_to_sma:
+                    # 2 periods below, go long
+                    action = TPSAction(d, TPSAction.LONG, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                    action.set_entry(d.close[0], 1)
+                    self.add_stages(action)
+                elif not above_sma and self.rsi[d].rsi[-1] > self.params.short_entry and self.rsi[d].rsi[0] > self.params.short_entry and levels2sma > self.min_atr_to_sma:
+                    # 2 periods above, go short
+                    action = TPSAction(d, TPSAction.SHORT, self.rsi[d].rsi[0], self.atr[d].atr[0], level, levels2sma)
+                    action.set_entry(d.close[0], 1)
+                    self.add_stages(action)
+                elif not self.params.trade['send_orders']:
+                    check_close_by_rsi = True
+            else:
+                check_close_by_rsi = True
+
+            # check for close
+            if check_close_by_rsi:
+                if (above_sma and self.rsi[d].rsi[0] > self.params.long_exit) or (not above_sma and self.rsi[d].rsi[0] < self.params.short_exit):
+                    #self.log(d, f"Close position {p.size}")
+                    action.action = TPSAction.CLOSE
+                    action.rsi = self.rsi[d].rsi[0]
+            self.add_action(action)
+
+
+class MPS(bt.Strategy):  # Momentum-Price-Scale: Builds on TPS but shifts focus from mean reversion to breakout/momentum conditions.
+    params = (
+        ('trade', {}),
+        ('long_entry', 25),
+        ('long_exit', 70),
+        ('short_entry', 75),
+        ('short_exit', 30),
+        ('atr_multiplier', 0.5),
+        ('logger', None),
+    )
+
+    POST_HEADERS = [
+        "Open positions:",
+        "Close positions & cancel orders:"
+    ]
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        ticker = ''
+        if data is not None:
+            ticker = data.ticker
+        if self.params.logger:
+            self.params.logger.debug('%-10s: %s' % (ticker, txt))
+        else:
+            print('%-10s: %s' % (ticker, txt))
+
+    def __init__(self):
+        self.log(None, f"params: {self.params._getkwargs()}")
+        TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
+        TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
+        self.max_positions = self.params.trade.get('max_positions', len(self.datas))
+        self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
+        self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
+        self.stages = self.params.trade['stages']
+        self.o = {}
+        self.sma = {}
+        self.rsi = {}
+        self.atr = {}
+        self.last_entry_price = {}
+        self.ticker_timestamps = {}  # ticker: timestamp
+        self.position_sizes = {}  # ticker: position size
+        self.orders = {}
+        self.pnl_correction = 0
+        
+        orders = self.broker.get_open_orders()
+        datas_with_open_orders = {}
+        for o in orders:
+            datas_with_open_orders[o.data.ticker] = o.data
+            self.orders.get(o.data, {})[o.ref] = o
+
+        for d in self.datas:
+            self.sma[d] = bt.indicators.SMA(d, period=200)
+            self.rsi[d] = bt.indicators.RSI_Safe(d, period=2)
+            self.atr[d] = bt.indicators.AverageTrueRange(d, period=10)
+            self.last_entry_price[d] = None
+            self.ticker_timestamps[d.ticker] = None
+            self.broker.register_ticker(d.ticker)
+
+            if self.params.trade['send_orders']:
+                # cancel stray orders
+                p = self.getposition(d)
+                self.position_sizes[d.ticker] = p.size
+                if p.size == 0 and d.ticker in datas_with_open_orders:
+                    self.log(d, "No position, cancel orders")
+                    self.cancel_all(d)
+
+        self.last_sent_timestamp = None
+        self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
+        self.broker.post_message(f"{self.params.trade['log_name']} started")
+
+    def notify_order(self, order):
+        self.log(order.data, f"notify_order: {str(order)}")
+        self.orders.get(order.data, {})[order.ref] = order
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        #self.log(trade.data, f"notify_trade: {str(trade)}, cash {self.broker.getcash()}")
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
+                 (trade.pnl, trade.pnlcomm, self.broker.getcash()))
+        if trade.pnl < -TPSAction.MAX_LOSS:
+            diff = abs(trade.pnl) - TPSAction.MAX_LOSS
+            self.pnl_correction += diff
+            self.log(trade.data, f"Trade PnL {trade.pnl} exceeds max loss by {diff}, total pnl_correction={self.pnl_correction}")
+
+    def submit_buy(self, d, lot_count, text):
+        order = self.buy(data=d, size=self.lot_size[d] * lot_count, exectype=bt.Order.Market)
+        self.log(d, 'BUY %s %s (%d), %.3f at %.3f, lot_count %d\n' % 
+            (d.ticker, text, order.ref, order.size, order.created.price, lot_count))
+        self.last_entry_price[d] = order.created.price
+
+    def submit_sell(self, d, lot_count, text):
+        order = self.sell(data=d, size=self.lot_size[d] * lot_count, exectype=bt.Order.Market)
+        self.log(d, 'SELL %s %s (%d), %.3f at %.3f, lot_count %d\n' % 
+            (d.ticker, text, order.ref, order.size, order.created.price, lot_count))
+        self.last_entry_price[d] = order.created.price
+
+    def add_stages(self, action):
+        qty = 1
+        value = action.entry_price
+        sl = None
+        tp = None
+        stop_diff = None
+        for s in self.stages:
+            if s['type'] == 'limit':
+                px = action.entry_price - action.level * s['px_mul'] * action.action
+                value += px * s['qty_mul']
+                qty += s['qty_mul']
+                action.add_order(px, s['qty_mul'], 'limit')
+            elif s['type'] == 'stop':
+                px = action.entry_price + action.level * s['px_mul'] * action.action
+                action.add_order(px, s['qty_mul'], 'stop')
+            elif s['type'] == 'sl':
+                sl = action.entry_price - action.level * s['px_mul'] * action.action
+            elif s['type'] == 'tp':
+                tp = action.entry_price + action.level * s['px_mul'] * action.action
+        stop_diff = abs(sl * qty - value)
+        action.set_sl_tp(sl, tp, stop_diff)
+
+    def execute_action(self, action):
+        if action.action is None:
+            return
+        if self.params.trade['send_orders']:
+            if action.action == TPSAction.CLOSE:
+                self.close(action.data, reduceOnly=True)
+                self.cancel_all(action.data)
+            else:
+                lot_size = action.qty_for_max_loss()
+                if action.action == TPSAction.LONG:
+                    if self.broker.has_bracket:
+                        self.buy_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
+                    else:
+                        self.buy(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
+                    for o in action.orders:
+                        if o['type'] == 'limit':
+                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        else:
+                            self.buy(data=action.data, size=lot_size * o['size'], stopprice=o['price'], exectype=bt.Order.Stop)
+                elif action.action == TPSAction.SHORT:
+                    if self.broker.has_bracket:
+                        self.sell_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
+                    else:
+                        self.sell(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopLoss=action.sl, takeProfit=action.tp)
+                    for o in action.orders:
+                        if o['type'] == 'limit':
+                            self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
+                        else:
+                            self.buy(data=action.data, size=lot_size * o['size'], stopprice=o['price'], exectype=bt.Order.Stop)
 
     def add_action(self, action):
         ticker = action.data.ticker
@@ -1119,7 +1466,7 @@ class TPS(bt.Strategy):
                     action.action = TPSAction.CLOSE
                     action.rsi = self.rsi[d].rsi[0]
             self.add_action(action)
-
+            
 
 class CRSISP500(bt.Strategy):
     params = (
@@ -1376,3 +1723,194 @@ class GoldScalping(bt.Strategy):
         else:
             [order, order_sl, order_tp] = self.buy_bracket(data=data, size=size, exectype=bt.Order.Market, stopprice=data.close[0] - sl_diff, limitprice=data.close[0] + tp_diff)
         self.log(data, '%s CREATE, %.2f at %.6f, sl %.6f, tp %.6f\n' % (side, size, order.created.price, order_sl.created.price, order_tp.created.price))
+
+
+class APlusB(bt.Strategy):
+    params = (
+        ('trade', {}),
+        ('enable_short', True),
+        ('ema_fast', 9),
+        ('ema_slow', 26),
+        ('A_tp', 16), #20),
+        ('B_sl', 4), #5),
+        ('logger', None),
+        ('leverage', None),
+        ('max_loss', 20),
+        ('ema_crossover_entry', False),
+    )
+
+    def log(self, data, txt, dt=None):
+        ''' Logging function for this strategy'''
+        dt = dt or self.data.datetime.date(0)
+        if self.params.logger:
+            self.params.logger.debug('%-10s: %s' % (data.ticker, txt))
+        else:
+            print('%-10s: %s' % (data.ticker, txt))
+
+    def __init__(self):
+        # To keep track of pending orders and buy price/commission
+        self.o = {}
+        param_dict = dict(self.params._getitems())
+        json_params = json.dumps(param_dict)
+        self.params.logger.debug(f"Strategy params: {json_params}")
+
+        self.entry_order = None
+        self.stop_order = None
+        self.tp_order = None
+
+        d = self.datas[0]
+        if self.params.ema_crossover_entry:
+            self.ema_fast = bt.indicators.ExponentialMovingAverage(d, period=self.params.ema_fast)
+            self.ema_slow = bt.indicators.ExponentialMovingAverage(d, period=self.params.ema_slow)
+        else:
+            self.next_buy = True
+        self.deviation = ReturnVolatility(d)
+
+    def notify_order(self, order):
+        self.log(order.data, f"notify_order: {str(order)}")
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order == self.stop_order:
+                self.cancel(self.tp_order)
+                self.tp_order = None
+            elif order == self.tp_order:
+                self.cancel(self.stop_order)
+                self.stop_order = None
+            if order.isbuy():
+                self.log(order.data,
+                    'BUY EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+            else:  # Sell
+                self.log(order.data,
+                     'SELL EXECUTED (%d), Price: %.6f, Cost: %.2f, Comm %.2f (orig_px %.2f)' %
+                    (order.ref,
+                      order.executed.price,
+                    order.executed.value,
+                    order.executed.comm,
+                    order.created.price))
+
+        elif order.status == order.Canceled:
+            self.log(order.data, 'Order (%d) Canceled' % order.ref)
+        elif order.status == order.Margin:
+            self.log(order.data, 'Order (%d) Margin' % order.ref)
+        elif order.status == order.Rejected:
+            self.log(order.data, 'Order (%d) Rejected' % order.ref)
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+                 (trade.pnl, trade.pnlcomm))
+
+    def next(self):
+        #if self.broker.getcash() < self.params.trade['stake']:
+        #    return
+        # Simply log the closing price of the series from the reference
+        d = self.datas[0]
+
+        self.log(d, '%s: Close: %.6f' % (d.datetime.datetime(0).isoformat(), d.close[0]))
+
+        pos = self.getposition(d)
+        #self.log(f"Position: {pos}")
+
+        # Check if we are in the market
+        if pos.size == 0:
+            entry_up = False
+            entry_dn = False
+            if self.params.ema_crossover_entry:
+                if self.ema_fast[0] > self.ema_slow[0] and self.ema_fast[-1] < self.ema_slow[-1]:  # EMA crossover
+                    entry_up = True
+                elif self.ema_fast[0] < self.ema_slow[0] and self.ema_fast[-1] > self.ema_slow[-1]:
+                    entry_dn = True
+            else:
+                entry_up = self.next_buy
+                entry_dn = not self.next_buy
+                self.next_buy = not self.next_buy
+
+            if entry_up or entry_dn:
+                tp_diff = self.params.A_tp * self.deviation[0] * d.close[0]
+                trail = self.params.B_sl * self.deviation[0] * d.close[0]
+                self.log(d, '%s: Close: %.6f, deviation %.3f, trail %.3f, tp_diff %.3f' %
+                         (d.datetime.datetime(0).isoformat(), d.close[0], self.deviation[0] * d.close[0], trail, tp_diff))
+                self.send_order(d, entry_dn, trail, tp_diff)
+
+
+    def send_order(self, data, is_sell, trail, tp_diff):
+        side = 'BUY'
+        if is_sell:
+            side = 'SELL'
+        size = self.params.max_loss / trail
+
+        pos_value = size * data.close[0]
+        if pos_value > 1000:
+            size = 1000 / data.close[0]
+
+        if is_sell:
+            entry_order = self.sell(
+                data=data,
+                size=size,
+                exectype=bt.Order.Market,
+                transmit=False
+            )
+            
+            stop_order = self.buy(
+                data=data,
+                size=size,
+                exectype=bt.Order.StopTrail,
+                trailamount=trail,
+                parent=entry_order,
+                transmit=False
+            )
+
+            tp_order = self.buy(
+                data=data,
+                size=size,
+                exectype=bt.Order.Limit,
+                price=data.close[0] - tp_diff,
+                parent=entry_order,
+                transmit=True
+            )
+
+        else:
+            entry_order = self.buy(
+                data=data,
+                size=size,
+                exectype=bt.Order.Market,
+                transmit=False
+            )
+
+            stop_order = self.sell(
+                data=data,
+                size=size,
+                exectype=bt.Order.StopTrail,
+                trailamount=trail,
+                parent=entry_order,
+                transmit=False
+            )
+
+            tp_order = self.sell(
+                data=data,
+                size=size,
+                exectype=bt.Order.Limit,
+                price=data.close[0] + tp_diff,
+                parent=entry_order,
+                transmit=True
+            )
+
+        # Track orders
+        self.entry_order = entry_order
+        self.stop_order = stop_order
+        self.tp_order = tp_order
+
+        self.log(data, '%s CREATE, %.2f at %.6f, sl %.6f, tp %.6f, pos_value %.2f\n' %
+                 (side, size, self.entry_order.created.price, self.stop_order.created.price, self.tp_order.created.price, size * data.close[0]))
