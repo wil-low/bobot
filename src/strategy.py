@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import json
+import sys
 import backtrader as bt
 from indicators.connorsrsi import ConnorsRSI
 from indicators.hv import HistoricalVolatility
@@ -745,6 +746,9 @@ class TPSAction:
     MAX_LOSS = None  # in USD
     usd_rates = {}  # ticker: USD exchange rate of a currency xxx
 
+    taker_commission = None
+    maker_commission = None
+
     def __init__(self, data, action=None, rsi=None, atr=None, level=None, levels2sma=None):
         self.data = data
         self.action = action
@@ -788,6 +792,10 @@ class TPSAction:
         o = {'price': price, 'size': size, 'type': type}
         self.orders.append(o)
 
+    @staticmethod
+    def commission(base_qty, size, price, is_taker):
+        return base_qty * size * price * (TPSAction.taker_commission if is_taker else TPSAction.maker_commission)
+
     def get_message(self):
         message = None
         if self.action is None:
@@ -795,13 +803,23 @@ class TPSAction:
         elif self.action == TPSAction.CLOSE:
             message = f"<b>{self.data.ticker}</b>: rsi={self.rsi:.2f}"
         else:
+            base_qty = self.qty_for_max_loss()
+            initial_pos_value = base_qty * self.entry_price
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
             message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
-            message += f"Entry={self.entry_price:.5f}, qty <u>{self.qty_for_max_loss():.3f}</u> (${self.MAX_LOSS} loss)"
+            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${self.MAX_LOSS} loss), value {initial_pos_value:.2f}, comm {self.commission(base_qty, 1, self.entry_price, True):.02f}"
+            max_limit_size = 1
             for o in self.orders:
-                message += f"\n    ×{o['size']} @ {o['price']:.5f}"
-            message += f"\n    SL @ {self.sl:.5f}"
-            message += f"\n    TP @ {self.tp:.5f}\n"
+                message += f"\n    ×{o['size']} @ {o['price']:.5f}, comm {self.commission(base_qty, o['size'], o['price'], False):.2f}"
+                max_limit_size += o['size']
+
+            min_comm = self.commission(base_qty, 1, self.sl, True)
+            max_comm = self.commission(base_qty, max_limit_size, self.sl, True)
+            message += f"\n    SL @ {self.sl:.5f}, comm {min_comm:.2f} - {max_comm:.2f}"
+
+            min_comm = self.commission(base_qty, 1, self.tp, True)
+            max_comm = self.commission(base_qty, max_limit_size, self.tp, True)
+            message += f"\n    TP @ {self.tp:.5f}, comm {min_comm:.2f} - {max_comm:.2f}\n"
         return message
 
 
@@ -833,8 +851,12 @@ class TPS(bt.Strategy):
 
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
+
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
         TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
+        TPSAction.maker_commission = self.params.trade.get('maker_commission', 0)
+        TPSAction.taker_commission = self.params.trade.get('taker_commission', 0)
+
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
         self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
@@ -874,6 +896,13 @@ class TPS(bt.Strategy):
         self.last_sent_timestamp = None
         self.actions = [{}, {}]  # [0] LONG/SHORT, [1] CLOSE: ticker: message
         self.broker.post_message(f"{self.params.trade['log_name']} started")
+
+        # Comm test
+        #act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
+        #act.set_entry(4.14000, 1)
+        #self.add_stages(act)
+        #self.log(d, act.get_message())
+        #sys.exit(0);
 
     def notify_order(self, order):
         self.log(order.data, f"notify_order: {str(order)}")

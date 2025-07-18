@@ -40,6 +40,8 @@
                 "type": "tp"
             }
         ],
+        "maker_commission": 0.000200,
+        "taker_commission": 0.000550,
         "min_atr_to_sma": 4,
         "signal_cluster_threshold": 5,
         "max_positions": 5
