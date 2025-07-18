@@ -807,19 +807,19 @@ class TPSAction:
             initial_pos_value = base_qty * self.entry_price
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
             message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
-            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${self.MAX_LOSS} loss), value {initial_pos_value:.2f}, comm {self.commission(base_qty, 1, self.entry_price, True):.02f}"
+            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${self.MAX_LOSS} loss), value {initial_pos_value:.2f}, c {self.commission(base_qty, 1, self.entry_price, True):.02f}"
             max_limit_size = 1
             for o in self.orders:
-                message += f"\n    ×{o['size']} @ {o['price']:.5f}, comm {self.commission(base_qty, o['size'], o['price'], False):.2f}"
+                message += f"\n    ×{o['size']} @ {o['price']:.5f}, c {self.commission(base_qty, o['size'], o['price'], False):.2f}"
                 max_limit_size += o['size']
 
             min_comm = self.commission(base_qty, 1, self.sl, True)
             max_comm = self.commission(base_qty, max_limit_size, self.sl, True)
-            message += f"\n    SL @ {self.sl:.5f}, comm {min_comm:.2f} - {max_comm:.2f}"
+            message += f"\n    SL @ {self.sl:.5f}, c {min_comm:.2f}–{max_comm:.2f}"
 
             min_comm = self.commission(base_qty, 1, self.tp, True)
             max_comm = self.commission(base_qty, max_limit_size, self.tp, True)
-            message += f"\n    TP @ {self.tp:.5f}, comm {min_comm:.2f} - {max_comm:.2f}\n"
+            message += f"\n    TP @ {self.tp:.5f}, c {min_comm:.2f}–{max_comm:.2f}\n"
         return message
 
 
@@ -898,11 +898,13 @@ class TPS(bt.Strategy):
         self.broker.post_message(f"{self.params.trade['log_name']} started")
 
         # Comm test
-        #act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
-        #act.set_entry(4.14000, 1)
-        #self.add_stages(act)
-        #self.log(d, act.get_message())
-        #sys.exit(0);
+        act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
+        act.set_entry(4.14000, 1)
+        self.add_stages(act)
+        msg = act.get_message()
+        self.log(d, msg)
+        self.broker.post_message(msg)
+        sys.exit(0);
 
     def notify_order(self, order):
         self.log(order.data, f"notify_order: {str(order)}")
