@@ -898,13 +898,13 @@ class TPS(bt.Strategy):
         self.broker.post_message(f"{self.params.trade['log_name']} started")
 
         # Comm test
-        act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
-        act.set_entry(4.14000, 1)
-        self.add_stages(act)
-        msg = act.get_message()
-        self.log(d, msg)
-        self.broker.post_message(msg)
-        sys.exit(0);
+        #act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
+        #act.set_entry(4.14000, 1)
+        #self.add_stages(act)
+        #msg = act.get_message()
+        #self.log(d, msg)
+        #self.broker.post_message(msg)
+        #sys.exit(0);
 
     def notify_order(self, order):
         self.log(order.data, f"notify_order: {str(order)}")
