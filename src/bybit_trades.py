@@ -55,7 +55,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", required=True, help='config file name')
     parser.add_argument("--start_date", "-s", required=True, help='start date in format YYYY-MM-DD')
-    parser.add_argument("--end_date", "-e", required=True, help='end date in format YYYY-MM-DD')
+    parser.add_argument("--end_date", "-e", help='end date in format YYYY-MM-DD')
     args = parser.parse_args()
 
     bybit_trades(args)

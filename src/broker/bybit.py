@@ -18,7 +18,8 @@ class BybitBroker(BobotBrokerBase):
     DEMO_URL = "https://api-demo.bybit.com"
     #MAIN_URL = "https://api.bybit.nl"
 
-    TRADE_HISTORY_PERIOD_MS = 5 * 24 * 60 * 60 * 1000  # 5 days
+    MS_IN_DAY = 24 * 60 * 60 * 1000
+    TRADE_HISTORY_PERIOD_MS = 5 * MS_IN_DAY  # 5 days
 
     def __init__(self, logger, bot_token, channel_id, api_key, api_secret, tickers):
         super().__init__(logger, 0, bot_token, channel_id, tickers)
@@ -345,11 +346,15 @@ class BybitBroker(BobotBrokerBase):
         self.trades_offset = 0
         cursor = None
         startTime = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp() * 1000)
-        endTime = int(datetime.strptime(date_to, "%Y-%m-%d").timestamp() * 1000)
+        if date_to is None:
+            endTime = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000 + self.MS_IN_DAY)  ## end of today
+        else:
+            endTime = int(datetime.strptime(date_to, "%Y-%m-%d").timestamp() * 1000)
         while True:
+            print(f"startTime={startTime}, endTime={endTime}")
             end_time = min(startTime + self.TRADE_HISTORY_PERIOD_MS, endTime)
             cursor = self.get_trades_chunk(cursor, startTime, end_time)
-            print(cursor)
+            #print(f">{cursor}<")
             if not cursor:
                 if end_time < endTime:
                     startTime += self.TRADE_HISTORY_PERIOD_MS
@@ -359,10 +364,10 @@ class BybitBroker(BobotBrokerBase):
 
     def get_trades_chunk(self, cursor, start_time, end_time):
         params = f"category=linear&limit=100&startTime={start_time}&endTime={end_time}"
-        if cursor is not None:
+        if cursor:
             params += f"&cursor={cursor}"
         response = self.http_request('/v5/position/closed-pnl', 'GET', params, False)
-        #print(f"get_trades_chunk: {len(response['result']['list'])}")
+        #print(f"get_trades_chunk: {response}")
         self.trades += response['result']['list']
         return response['result']['nextPageCursor']
 
