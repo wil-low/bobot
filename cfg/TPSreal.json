@@ -3,7 +3,7 @@
         "name": "TPS"
     },
     "notifier": {
-        "-auth": "auth/tg_channel.json"
+        "auth": "auth/tg_channel.json"
     },
     "trade": {
         "log_name": "TPSreal",
@@ -13,7 +13,7 @@
         "send_signals": true,
         "send_orders": true,
         "cash": 2500,
-        "max_loss": 25,
+        "max_loss": 10,
         "stages": [
             {
                 "px_mul": 1,
