@@ -15,19 +15,19 @@ from broker.broker import BobotBrokerBase, InstrumentInfo
 
 class BybitBroker(BobotBrokerBase):
 
-    DEMO_URL = "https://api-demo.bybit.com"
-    #MAIN_URL = "https://api.bybit.nl"
+    #DEMO_URL = "https://api-demo.bybit.com"
+    #MAIN_URL = "https://api.bybit.com"  #"https://api.bybit.nl"
 
     MS_IN_DAY = 24 * 60 * 60 * 1000
     TRADE_HISTORY_PERIOD_MS = 5 * MS_IN_DAY  # 5 days
 
-    def __init__(self, logger, bot_token, channel_id, api_key, api_secret, tickers):
+    def __init__(self, logger, bot_token, channel_id, api_key, api_secret, url, tickers):
         super().__init__(logger, 0, bot_token, channel_id, tickers)
         self.cash = 10000.0  # initial virtual balance
         self.api_key = api_key
         self.api_secret = api_secret
         self.recv_window = str(5000)
-        self.url = BybitBroker.DEMO_URL
+        self.url = url
         self.HEADERS = {
             'X-BAPI-API-KEY': api_key,
             'X-BAPI-SIGN': None,

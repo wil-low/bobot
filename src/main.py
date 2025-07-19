@@ -123,6 +123,7 @@ def run_bot():
             channel_id=channel_id,
             api_key=broker_auth['api_key'],
             api_secret=broker_auth['api_secret'],
+            url=broker_auth['url'],
             tickers=tickers
         )
     elif config['trade']['broker'] == "RStockTrader":
