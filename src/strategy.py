@@ -743,7 +743,7 @@ class TPSAction:
     NONE = CLOSE
 
     FOREX_MODE = False
-    MAX_LOSS = None  # in USD
+    MAX_LOSS_FOR_MESSAGES = 10
     usd_rates = {}  # ticker: USD exchange rate of a currency xxx
 
     taker_commission = None
@@ -769,23 +769,23 @@ class TPSAction:
         self.tp = tp
         self.stop_diff = stop_diff
 
-    def qty_for_max_loss(self):
+    def qty_for_max_loss(self, max_loss):
         result = None
         if self.FOREX_MODE:
             t = self.data.ticker.replace('frx', '')
             usd_pos = t.find('USD')
             if usd_pos == 0:  # USDxxx
-                result = self.MAX_LOSS / (self.stop_diff / self.entry_price)
+                result = max_loss / (self.stop_diff / self.entry_price)
             elif usd_pos == 3:  # xxxUSD
-                result = self.MAX_LOSS / self.stop_diff
+                result = max_loss / self.stop_diff
             elif usd_pos == -1:  # cross pair
                 quote_currency = t[3:]
                 #print(f"{t}, quote {quote_currency}, usd_rates: {self.usd_rates}")
-                result = self.MAX_LOSS / self.stop_diff / self.usd_rates[quote_currency]
+                result = max_loss / self.stop_diff / self.usd_rates[quote_currency]
             else:
                 raise KeyError(f"qty_for_max_loss: Wrong place for USD in ticker '{t}")
         else:
-            result = self.MAX_LOSS / self.stop_diff
+            result = max_loss / self.stop_diff
         return result
 
     def add_order(self, price, size, type):
@@ -803,11 +803,11 @@ class TPSAction:
         elif self.action == TPSAction.CLOSE:
             message = f"<b>{self.data.ticker}</b>: rsi={self.rsi:.2f}"
         else:
-            base_qty = self.qty_for_max_loss()
+            base_qty = self.qty_for_max_loss(TPSAction.MAX_LOSS_FOR_MESSAGES)
             initial_pos_value = base_qty * self.entry_price
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
             message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
-            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${self.MAX_LOSS} loss), value {initial_pos_value:.2f}, c {self.commission(base_qty, 1, self.entry_price, True):.02f}"
+            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${TPSAction.MAX_LOSS_FOR_MESSAGES} loss), value {initial_pos_value:.2f}, c {self.commission(base_qty, 1, self.entry_price, True):.02f}"
             max_limit_size = 1
             for o in self.orders:
                 message += f"\n    ×{o['size']} @ {o['price']:.5f}, c {self.commission(base_qty, o['size'], o['price'], False):.2f}"
@@ -853,10 +853,10 @@ class TPS(bt.Strategy):
         self.log(None, f"params: {self.params._getkwargs()}")
 
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
-        TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
         TPSAction.maker_commission = self.params.trade.get('maker_commission', 0)
         TPSAction.taker_commission = self.params.trade.get('taker_commission', 0)
 
+        self.max_loss = self.params.trade['max_loss']
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
         self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
@@ -947,8 +947,8 @@ class TPS(bt.Strategy):
             return
         self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
                  (trade.pnl, trade.pnlcomm, self.broker.getcash()))
-        if trade.pnl < -TPSAction.MAX_LOSS:
-            diff = abs(trade.pnl) - TPSAction.MAX_LOSS
+        if trade.pnl < -self.max_loss:
+            diff = abs(trade.pnl) - self.max_loss
             self.pnl_correction += diff
             self.log(trade.data, f"Trade PnL {trade.pnl} exceeds max loss by {diff}, total pnl_correction={self.pnl_correction}")
 
@@ -994,7 +994,7 @@ class TPS(bt.Strategy):
                 self.close(action.data, reduceOnly=True)
                 self.cancel_all(action.data)
             else:
-                lot_size = action.qty_for_max_loss()
+                lot_size = action.qty_for_max_loss(self.max_loss)
                 if action.action == TPSAction.LONG:
                     if self.broker.has_bracket:
                         self.buy_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
@@ -1202,7 +1202,7 @@ class MPS(bt.Strategy):  # Momentum-Price-Scale: Builds on TPS but shifts focus 
     def __init__(self):
         self.log(None, f"params: {self.params._getkwargs()}")
         TPSAction.FOREX_MODE = self.params.trade.get('forex_mode', False)
-        TPSAction.MAX_LOSS = self.params.trade.get('max_loss', 10)
+        self.max_loss = self.params.trade['max_loss']
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
         self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
@@ -1284,8 +1284,8 @@ class MPS(bt.Strategy):  # Momentum-Price-Scale: Builds on TPS but shifts focus 
             return
         self.log(trade.data, 'OPERATION PROFIT, GROSS %.2f, NET %.2f, cash %.2f' %
                  (trade.pnl, trade.pnlcomm, self.broker.getcash()))
-        if trade.pnl < -TPSAction.MAX_LOSS:
-            diff = abs(trade.pnl) - TPSAction.MAX_LOSS
+        if trade.pnl < -self.max_loss:
+            diff = abs(trade.pnl) - self.max_loss
             self.pnl_correction += diff
             self.log(trade.data, f"Trade PnL {trade.pnl} exceeds max loss by {diff}, total pnl_correction={self.pnl_correction}")
 
@@ -1331,7 +1331,7 @@ class MPS(bt.Strategy):  # Momentum-Price-Scale: Builds on TPS but shifts focus 
                 self.close(action.data, reduceOnly=True)
                 self.cancel_all(action.data)
             else:
-                lot_size = action.qty_for_max_loss()
+                lot_size = action.qty_for_max_loss(self.max_loss)
                 if action.action == TPSAction.LONG:
                     if self.broker.has_bracket:
                         self.buy_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
