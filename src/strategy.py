@@ -794,7 +794,7 @@ class TPSAction:
 
     @staticmethod
     def commission(base_qty, size, price, is_taker):
-        return base_qty * size * price * (TPSAction.taker_commission if is_taker else TPSAction.maker_commission)
+        return abs(base_qty * size * price * (TPSAction.taker_commission if is_taker else TPSAction.maker_commission))
 
     def get_message(self):
         message = None
@@ -807,19 +807,29 @@ class TPSAction:
             initial_pos_value = base_qty * self.entry_price
             side = 'LONG  🟢' if self.action == TPSAction.LONG else 'SHORT 🔴'
             message = f"<b>{self.data.ticker}</b>\n{side}, rsi={self.rsi:.1f}, atr={self.volatility:.2f}%, to_sma={self.levels2sma:.2f}\n"
-            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u> (${TPSAction.MAX_LOSS_FOR_MESSAGES} loss), value {initial_pos_value:.2f}, c {self.commission(base_qty, 1, self.entry_price, True):.02f}"
+            message += f"Entry={self.entry_price:.5f}, qty <u>{base_qty:.3f}</u>"
+            limit_orders_comm = 0
             max_limit_size = 1
             for o in self.orders:
-                message += f"\n    ×{o['size']} @ {o['price']:.5f}, c {self.commission(base_qty, o['size'], o['price'], False):.2f}"
+                message += f"\n    ×{o['size']} @ {o['price']:.5f}"
+                if o['type'] == 'stop':
+                    message += " (conditional market)"
+                else:
+                    message += f" {o['type']}"
                 max_limit_size += o['size']
+                limit_orders_comm += self.commission(base_qty, o['size'], o['price'], False)
 
-            min_comm = self.commission(base_qty, 1, self.sl, True)
-            max_comm = self.commission(base_qty, max_limit_size, self.sl, True)
-            message += f"\n    SL @ {self.sl:.5f}, c {min_comm:.2f}–{max_comm:.2f}"
+            entry_comm = self.commission(base_qty, 1, self.entry_price, True)
+            sl_exit_comm = self.commission(base_qty, max_limit_size, self.sl, True)
+            min_tp_exit_comm = self.commission(base_qty, 1, self.tp, True)
+            max_tp_exit_comm = self.commission(base_qty, max_limit_size, self.tp, True)
 
-            min_comm = self.commission(base_qty, 1, self.tp, True)
-            max_comm = self.commission(base_qty, max_limit_size, self.tp, True)
-            message += f"\n    TP @ {self.tp:.5f}, c {min_comm:.2f}–{max_comm:.2f}\n"
+            min_comm = entry_comm + min_tp_exit_comm
+            max_comm = entry_comm + max(sl_exit_comm, max_tp_exit_comm)
+
+            message += f"\n    SL @ {self.sl:.5f}"
+            message += f"\n    TP @ {self.tp:.5f}"
+            message += f"\nTotal commissions {min_comm:.2f}–{max_comm:.2f}\n"
         return message
 
 
@@ -835,7 +845,7 @@ class TPS(bt.Strategy):
     )
 
     POST_HEADERS = [
-        "Open positions:",
+        "",
         "Close positions & cancel orders:"
     ]
 
@@ -857,6 +867,8 @@ class TPS(bt.Strategy):
         TPSAction.taker_commission = self.params.trade.get('taker_commission', 0)
 
         self.max_loss = self.params.trade['max_loss']
+        self.POST_HEADERS[0] = f"Open positions (${TPSAction.MAX_LOSS_FOR_MESSAGES} loss):"
+
         self.max_positions = self.params.trade.get('max_positions', len(self.datas))
         self.min_atr_to_sma = self.params.trade['min_atr_to_sma']
         self.signal_cluster_threshold = self.params.trade['signal_cluster_threshold']
@@ -898,11 +910,10 @@ class TPS(bt.Strategy):
         self.broker.post_message(f"{self.params.trade['log_name']} started")
 
         # Comm test
-        #act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000- 4.10461, 5.58)
+        #act = TPSAction(d, TPSAction.LONG, 6.6, 1.71, 4.14000 - 4.10461, 5.58)
         #act.set_entry(4.14000, 1)
         #self.add_stages(act)
         #msg = act.get_message()
-        #self.log(d, msg)
         #self.broker.post_message(msg)
         #sys.exit(0);
 
@@ -972,7 +983,7 @@ class TPS(bt.Strategy):
         stop_diff = None
         for s in self.stages:
             if s['type'] == 'limit':
-                px = action.entry_price - action.level * s['px_mul'] * action.action
+                px = action.entry_price + action.level * s['px_mul'] * action.action
                 value += px * s['qty_mul']
                 qty += s['qty_mul']
                 action.add_order(px, s['qty_mul'], 'limit')
@@ -980,7 +991,7 @@ class TPS(bt.Strategy):
                 px = action.entry_price + action.level * s['px_mul'] * action.action
                 action.add_order(px, s['qty_mul'], 'stop')
             elif s['type'] == 'sl':
-                sl = action.entry_price - action.level * s['px_mul'] * action.action
+                sl = action.entry_price + action.level * s['px_mul'] * action.action
             elif s['type'] == 'tp':
                 tp = action.entry_price + action.level * s['px_mul'] * action.action
         stop_diff = abs(sl * qty - value)
@@ -1003,8 +1014,8 @@ class TPS(bt.Strategy):
                     for o in action.orders:
                         if o['type'] == 'limit':
                             self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
-                        else:
-                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
+                        #else:
+                        #    self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
                 elif action.action == TPSAction.SHORT:
                     if self.broker.has_bracket:
                         self.sell_bracket(data=action.data, size=lot_size * action.entry_size, exectype=bt.Order.Market, stopprice=action.sl, limitprice=action.tp)
@@ -1013,8 +1024,8 @@ class TPS(bt.Strategy):
                     for o in action.orders:
                         if o['type'] == 'limit':
                             self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Limit)
-                        else:
-                            self.buy(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
+                        #else:
+                        #    self.sell(data=action.data, size=lot_size * o['size'], price=o['price'], exectype=bt.Order.Stop)
 
     def add_action(self, action):
         ticker = action.data.ticker

@@ -16,22 +16,27 @@
         "max_loss": 10,
         "stages": [
             {
+                "px_mul": -1,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": -2,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
+                "px_mul": -3,
+                "qty_mul": 1,
+                "type": "limit"
+            },
+            {
                 "px_mul": 1,
                 "qty_mul": 1,
-                "type": "limit"
+                "type": "stop"
             },
             {
-                "px_mul": 2,
-                "qty_mul": 1,
-                "type": "limit"
-            },
-            {
-                "px_mul": 3,
-                "qty_mul": 1,
-                "type": "limit"
-            },
-            {
-                "px_mul": 4,
+                "px_mul": -4,
                 "qty_mul": 0,
                 "type": "sl"
             },
