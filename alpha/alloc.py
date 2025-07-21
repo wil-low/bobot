@@ -158,6 +158,36 @@ class AllocStrategy:
         crsi = (rsi + updown_rsi + roc_prank) / 3.0
         return crsi
 
+    @staticmethod
+    def compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14, use_ema: bool = False) -> pd.Series:
+        """
+        Calculate the Average True Range (ATR) using only pandas.Series inputs.
+        
+        Parameters:
+            high (pd.Series): High prices
+            low (pd.Series): Low prices
+            close (pd.Series): Close prices
+            period (int): ATR period, usually 14
+            use_ema (bool): Use EMA instead of SMA for averaging TR
+            
+        Returns:
+            pd.Series: ATR values
+        """
+        prev_close = close.shift(1)
+
+        tr1 = (high - low).abs()
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+
+        true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        if use_ema:
+            atr = true_range.ewm(span=period, adjust=False).mean()
+        else:
+            atr = true_range.rolling(window=period).mean()
+
+        return atr
+
     def floor2(self, val):
         return int(val * 100) / 100
 
@@ -238,7 +268,7 @@ class AllocStrategy:
         portfolio['cash'] = self.floor2(cash)
         return cash
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         raise NotImplementedError
     
     def to_be_closed(self):
@@ -264,7 +294,7 @@ class RisingAssets(AllocStrategy):
         if self.rebalance:
             self.log(f"trying to rebalance")
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         if self.rebalance:
             top = []
             for ticker in self.tickers:
@@ -322,7 +352,7 @@ class DynamicTreasures(AllocStrategy):
         if self.rebalance:
             self.log(f"trying to rebalance")
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         if self.rebalance:
             top = []
             for ticker in self.tickers:
@@ -385,7 +415,7 @@ class ETFAvalanches(AllocStrategy):
         self.remains = self.tickers[-1]
         self.log(f"trying to rebalance")
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         top = []
         tickers_to_close = self.to_be_closed()
         for ticker in self.tickers:
@@ -481,7 +511,7 @@ class MeanReversion(AllocStrategy):
 
     def __init__(self, logger, key, portfolio, today):
         self.long_trend_ticker = 'SPLG'
-        self.remains = 'SPTS'
+        self.remains = 'JPST'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
         if len(self.portfolio['tickers']) == 0:
@@ -491,7 +521,7 @@ class MeanReversion(AllocStrategy):
         if self.rebalance:
             self.log(f"trying to rebalance")
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         trend_d = self.data[self.long_trend_ticker].close
         tickers_to_close = self.to_be_closed()
         new_portfolio = copy.deepcopy(self.portfolio)
@@ -500,7 +530,7 @@ class MeanReversion(AllocStrategy):
             if trend_d.iloc[-1] > trend_d.iloc[-21 * 6 - 1]:  # SPY’s total return over the last six months (126 trading days) is positive
                 self.log(f"{self.long_trend_ticker} trend is positive: {trend_d.iloc[-1]} > {trend_d.iloc[-21 * 6 - 1]}")
                 for ticker in self.tickers:
-                    if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
+                    if ticker != self.remains and ticker != self.long_trend_ticker and not ticker in tickers_to_close and not ticker in self.portfolio['tickers'] and not ticker in excluded_symbols:
                         try:
                             d = self.data[ticker]
                             close_now = d.close.iloc[-1]
@@ -644,7 +674,7 @@ class CRSISP500(AllocStrategy):
         }
         self.remains = self.tickers[-1]
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         tickers_to_close = self.to_be_closed()
         new_portfolio = copy.deepcopy(self.portfolio)
         top = []
@@ -773,7 +803,7 @@ class TPS(AllocStrategy):
             'short_exit': 30
         }
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         tickers_to_close = self.to_be_closed()
         self.log(tickers_to_close)
         new_portfolio = copy.deepcopy(self.portfolio)
@@ -864,7 +894,7 @@ class VolPanics(AllocStrategy):
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today, 202)
 
-    def allocate(self):
+    def allocate(self, excluded_symbols):
         tickers_to_close = self.to_be_closed()
         self.log(tickers_to_close)
         new_portfolio = copy.deepcopy(self.portfolio)
@@ -939,3 +969,54 @@ class VolPanics(AllocStrategy):
 
     def get_tickers(self):
         return ['VXX']
+
+
+class MomentumPinball(AllocStrategy):
+    # Rebalances daily
+    SLOT_COUNT = 1
+
+    def __init__(self, logger, key, portfolio, today):
+        super().__init__(logger, key, portfolio, today, 202)
+
+    def allocate(self, excluded_symbols):
+        new_portfolio = {'tickers': {}}
+        top = []
+        for ticker in self.tickers:
+            d = self.data[ticker]
+            roc = d.close - d.close.shift(1)
+            rsi = self.compute_rsi(roc, 3)
+            atr = self.compute_atr(d.high, d.low, d.close, 14)
+            atr_percent = self.floor2(atr.iloc[-1] / d.close.iloc[-1] * 100)
+            self.log(f"{ticker} close={d.close.iloc[-1]}, roc={roc.iloc[-1]:.2f}, rsi={rsi.iloc[-1]:.2f}, atr%={atr_percent:.2f}")
+            text = None
+            # of the first four bars trading range on 15m TF
+            if rsi.iloc[-1] < 30:  # buy setup
+                text = "BUY  stop above the 4-bar HIGH"
+            elif rsi.iloc[-1] > 70:  # sell setup
+                text = "SELL stop below the 4-bar LOW"
+            if text is not None:
+                top.append({'ticker': ticker, 'close': d.close.iloc[-1], 'rsi': self.floor2(rsi.iloc[-1]), 'atr%': atr_percent, 'text': text})
+
+        top_sorted = sorted(filter(lambda x: x['atr%'] >= 3, top), key=lambda x: x['atr%'], reverse=True)[:5]
+        for item in top_sorted:
+            t = item['ticker']
+            del item['ticker']
+            new_portfolio['tickers'][t] = item
+
+        return new_portfolio, None
+
+    def get_tickers(self):
+        # load from DB instead of file
+        conn = sqlite3.connect(AllocStrategy.DB_FILE)
+
+        query = f"""
+        SELECT t.symbol FROM tickers t
+        INNER JOIN sp500 sp ON t.symbol = sp.symbol
+        WHERE t.disabled = 0
+        ORDER BY t.symbol
+        """
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        tickers = [row[0] for row in rows]
+        return tickers

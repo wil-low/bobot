@@ -46,7 +46,7 @@ def next_working_day(today):
             break
     return next_date_str
 
-def alpha_alloc(config, today, sync):
+def alpha_alloc(config, today, action, excluded_symbols):
     work_dir = f"work/portfolio/{config['subdir']}"
     if today is None:
         # find latest portfolio json
@@ -63,7 +63,7 @@ def alpha_alloc(config, today, sync):
         print(f"{today} is a weekend")
         logger.warning(f"{today} is a weekend")
         today = next_working_day(today)
-        alpha_alloc(config, today, sync)
+        alpha_alloc(config, today, action)
         return
 
     os.makedirs(work_dir, exist_ok=True)
@@ -71,7 +71,7 @@ def alpha_alloc(config, today, sync):
 
     keys = [item['key'] for item in config['strategy']]
 
-    if sync:
+    if action == 'sync':
         # we assume tickers are correctly assigned to keys
         with open(f"{work_dir}/{today}.json") as f:
             portfolio = json.load(f)
@@ -81,13 +81,13 @@ def alpha_alloc(config, today, sync):
         # get portfolio from broker
         broker = RStockTrader(config['auth'])
         print(broker.positions)
-        sync = {
+        action = {
             "cash": broker.getcash(),
             "equity": broker.getvalue(),
             "leverage": config['leverage']
         }
         for item in config['strategy']:
-            sync[item['key']] = {
+            action[item['key']] = {
                 'tickers': {},
                 'cash': 0,
                 'equity': 0
@@ -95,41 +95,44 @@ def alpha_alloc(config, today, sync):
 
         # scan all keys and update tickers
         for key in keys:
-            sync[key]['cash'] = portfolio[key]['cash']
-            sync[key]['equity'] = portfolio[key]['equity']
+            action[key]['cash'] = portfolio[key]['cash']
+            action[key]['equity'] = portfolio[key]['equity']
             for ticker, info in portfolio[key]['tickers'].items():
                 p = broker.positions.get(ticker, None)
                 prefix = "%2s - %-6s" % (key, ticker)
                 if p is None:
                     if info['type'] == 'limit':
                         # limit day order was not filled
-                        sync[key]['cash'] += floor2(info['qty'] * info['close'])
+                        action[key]['cash'] += floor2(info['qty'] * info['close'])
                         logger.info(f"{prefix}: REMOVE limit order")
                         continue
                 else:
-                    sync[key]['tickers'][ticker] = info
-                    if sync[key]['tickers'][ticker]['close'] != p['close']:
-                        sync[key]['tickers'][ticker]['close'] = p['close']
+                    action[key]['tickers'][ticker] = info
+                    if action[key]['tickers'][ticker]['close'] != p['close']:
+                        action[key]['tickers'][ticker]['close'] = p['close']
                         logger.info(f"{prefix}: update CLOSE price")
                     if key == 'mr':
                         logger.info(f"{prefix}: check {ticker}")
-                        if sync[key]['tickers'][ticker]['entry'] != p['entry']:
-                            sync[key]['tickers'][ticker]['entry'] = p['entry']
+                        if action[key]['tickers'][ticker]['entry'] != p['entry']:
+                            action[key]['tickers'][ticker]['entry'] = p['entry']
                             logger.info(f"{prefix}: update ENTRY price")
 
         #compute_totals(sync, keys)
         fn = f"{work_dir}/sync_{today}.json"
         with open(fn, 'w') as f:
-            json.dump(sync, f, indent=4, sort_keys=True)
+            json.dump(action, f, indent=4, sort_keys=True)
 
         logger.info(f"Portfolio written to {fn}")
         return
 
     else:
         try:
-            with open(f"{work_dir}/{today}.json") as f:
-                portfolio = json.load(f)
-                #print(self.portfolio)
+            if action == 'next':
+                with open(f"{work_dir}/{today}.json") as f:
+                    portfolio = json.load(f)
+                    #print(self.portfolio)
+            else:
+                raise FileNotFoundError('start')
         except FileNotFoundError:
             cash = config['initial_cash']
             logger.debug(f"Starting with empty portfolio: {cash}")
@@ -161,18 +164,21 @@ def alpha_alloc(config, today, sync):
         args = (logger, item['key'], portfolio.copy(), today)
         strategy_cls = getattr(module, item['class'])
         s = strategy_cls(*args)
-        new_portfolio[s.key], trans = s.allocate()
+        new_portfolio[s.key], trans = s.allocate(excluded_symbols)
         if trans:
             new_portfolio["transitions"][s.key] = trans
 
     if new_portfolio["transitions"]:
         new_portfolio["transitions"]['text'] = f"Execute transitions at open {today}"
+        print(new_portfolio["transitions"])
+    else:
+        print(f"{today}: no transitions")
 
-    #logger.info('new_portfolio: ' + json.dumps(new_portfolio, indent=4, sort_keys=True))
-    compute_totals(new_portfolio, keys)
-    logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
-    for key in keys:
-        logger.info(f"    {key}: {floor2(new_portfolio[key]['equity'] / new_portfolio['equity'] * 100)}%")
+    if config.get('compute_totals', True):
+        compute_totals(new_portfolio, keys)
+        logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
+        for key in keys:
+            logger.info(f"    {key}: {floor2(new_portfolio[key]['equity'] / new_portfolio['equity'] * 100)}%")
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
@@ -184,7 +190,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", required=True, help='config file name')
     parser.add_argument("--date", "-d", help='date in format YYYY-MM-DD')
-    parser.add_argument("--action", "-a", required=True, choices=['sync', 'next'], help="sync positions with broker or calculate next day")
+    parser.add_argument("--action", "-a", required=True, choices=['sync', 'start', 'next'], help="sync positions with broker, start empty or calculate next day")
+    parser.add_argument("--exclude", "-x", required=False, help="temporarily exclude symbols (comma-separated) - for MeanReversion only")
     args = parser.parse_args()
 
     config = {}
@@ -205,4 +212,6 @@ if __name__ == '__main__':
     logger.debug("")
     logger.debug("")
 
-    alpha_alloc(config, today, args.action == 'sync')
+    excluded_symbols = args.exclude.split(',')
+
+    alpha_alloc(config, today, args.action, excluded_symbols)
