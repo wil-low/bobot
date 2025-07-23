@@ -212,6 +212,6 @@ if __name__ == '__main__':
     logger.debug("")
     logger.debug("")
 
-    excluded_symbols = args.exclude.split(',')
+    excluded_symbols = [] if args.exclude is None else args.exclude.split(',')
 
     alpha_alloc(config, today, args.action, excluded_symbols)
