@@ -11,7 +11,7 @@
         "broker": "Bybit",
         "auth": "auth/bybit-TPSreal.json",
         "send_signals": true,
-        "send_orders": true,
+        "send_orders": false,
         "cash": 2500,
         "max_loss": 10,
         "stages": [
