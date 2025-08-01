@@ -324,7 +324,7 @@ class RisingAssets(AllocStrategy):
                 close = self.data[item['ticker']].close.iloc[-1]
                 alloc_perc = item['rev_vol'] / vol_sum
                 alloc_cash = self.allocatable * alloc_perc
-                alloc = self.floor2(alloc_cash / close)
+                alloc = int(alloc_cash / close)
                 if alloc >= 1:
                     value = self.floor2(close * alloc)
                     self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
