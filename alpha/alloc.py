@@ -539,17 +539,15 @@ class MeanReversion(AllocStrategy):
                             #self.log(f"{ticker} check: {close_now}, year {close_year}, month {close_month}")
                             if close_month / close_now > 1.5:
                                 self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
-                            if close_now < close_year:  # negative total return over the past year
-                                if close_now < close_month:  # negative total return over the past month
-                                    weekly_series = d.close.resample('W').last()
-                                    #print(weekly_series)
-                                    rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
-                                    #self.log(f"{ticker} passed, rsi {rsi}")
-                                    if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
-                                        #print(f"allocate {ticker}: rsi {rsi}")
-                                        daily_return = d.close / d.close.shift(1)
-                                        volatility = daily_return.rolling(window=100).std()
-                                        top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
+                            weekly_series = d.close.resample('W').last()
+                            #print(weekly_series)
+                            rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
+                            #self.log(f"{ticker} passed, rsi {rsi}")
+                            if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
+                                #print(f"allocate {ticker}: rsi {rsi}")
+                                daily_return = d.close / d.close.shift(1)
+                                volatility = daily_return.rolling(window=100).std()
+                                top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
                         except KeyError:
                             pass
             else:
