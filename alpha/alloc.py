@@ -459,7 +459,7 @@ class ETFAvalanches(AllocStrategy):
         for item in top_sorted:
             alloc = 0
             entry = item['entry']
-            alloc = int(alloc_slot / entry)
+            alloc = self.floor2(alloc_slot / entry)
             if alloc >= 1:
                 alloc = -alloc
                 value = self.floor2(entry * alloc)
@@ -537,13 +537,13 @@ class MeanReversion(AllocStrategy):
                             close_year = d.close.iloc[-21 * 12 - 1]
                             close_month = d.close.iloc[-21 * 1 - 1]
                             #self.log(f"{ticker} check: {close_now}, year {close_year}, month {close_month}")
-                            if close_month / close_now > 1.5:
-                                self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
                             weekly_series = d.close.resample('W').last()
                             #print(weekly_series)
                             rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
                             #self.log(f"{ticker} passed, rsi {rsi}")
                             if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
+                                if close_month / close_now > 1.5:
+                                    self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
                                 #print(f"allocate {ticker}: rsi {rsi}")
                                 daily_return = d.close / d.close.shift(1)
                                 volatility = daily_return.rolling(window=100).std()
