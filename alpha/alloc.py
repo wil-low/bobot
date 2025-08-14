@@ -430,10 +430,12 @@ class ETFAvalanches(AllocStrategy):
                         self.log(f"{ticker}: rsi check {rsi.iloc[-1]}")
                         if rsi.iloc[-1] > 70:
                             self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
-                            entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
-                            daily_return = d.close / d.close.shift(1)
-                            volatility = daily_return.rolling(window=100).std()
-                            top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
+                            threshold = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA * 2 / 100))  # make sure we are not too close to exit condition
+                            if d.close.iloc[-21 * 1 - 1] > threshold:
+                                entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
+                                daily_return = d.close / d.close.shift(1)
+                                volatility = daily_return.rolling(window=100).std()
+                                top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
         self.log(f"alloc_slot = {alloc_slot:.2f}")
