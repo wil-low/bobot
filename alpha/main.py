@@ -34,6 +34,17 @@ def save_portfolio(p, fn):
     with open(fn, 'w') as f:
         json.dump(p, f, indent=4, sort_keys=True)
 
+def print_summary(p, keys):
+    logger.info("Portfolio summary:")
+    summary = {} 
+    for key in keys:
+        if key in p:
+            for t, data in p[key]['tickers'].items():
+                summary[t] = summary.get(t, 0) + data['qty'];
+    for t in sorted(summary.keys()):
+        logger.info(f"    {t:5s}= {abs(summary[t])}")
+    logger.info("")
+
 def next_working_day(today):
     next_date_str = None
     current = datetime.strptime(today, '%Y-%m-%d')
@@ -173,6 +184,8 @@ def alpha_alloc(config, today, action, excluded_symbols):
         print(new_portfolio["transitions"])
     else:
         print(f"{today}: no transitions")
+
+    print_summary(new_portfolio, keys)
 
     if config.get('compute_totals', True):
         compute_totals(new_portfolio, keys)
