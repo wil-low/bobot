@@ -59,7 +59,6 @@
         "timeframe_min": [60],
         "realtime_md": false,
         "tickers": [
-            "MKRUSDT",
             "LDOUSDT",
             "KAIAUSDT",
             "GALAUSDT",
