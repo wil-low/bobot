@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS prices (
     FOREIGN KEY (ticker_id) REFERENCES tickers(id),
     UNIQUE(ticker_id, date)
 );
+
+CREATE INDEX idx_prices_covering
+ON prices(ticker_id, date, close, volume);
+
+CREATE INDEX idx_prices_date_ticker ON prices(date, ticker_id);
 """)
 conn.commit()
 
