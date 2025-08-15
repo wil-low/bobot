@@ -636,17 +636,21 @@ class MeanReversion(AllocStrategy):
         conn = sqlite3.connect(AllocStrategy.DB_FILE)
 
         query = f"""
-        SELECT ticker_id, t.symbol
-            FROM (
-                SELECT ticker_id, AVG(adjClose * adjVolume) AS avg_dollar_volume
-                FROM prices
-                WHERE date >= DATE(?, 'start of month', '-200 days')
-                GROUP BY ticker_id
-                ORDER BY avg_dollar_volume DESC
-            )  
-            JOIN tickers t ON ticker_id = t.id
-            WHERE t.type in ('CS', 'ADRC') AND t.disabled = 0
-            LIMIT 500
+        SELECT p.ticker_id, t.symbol
+        FROM (
+            SELECT ticker_id, AVG(adjClose * adjVolume) AS avg_dollar_volume
+            FROM prices
+            WHERE date >= DATE(?, 'start of month', '-200 days')
+              AND ticker_id IN (
+                  SELECT id 
+                  FROM tickers
+                  WHERE type in ('CS', 'ADRC') AND disabled=0
+              )
+            GROUP BY ticker_id
+        ) AS p
+        JOIN tickers t ON t.id = p.ticker_id
+        ORDER BY p.avg_dollar_volume DESC
+        LIMIT 500;
         """
         cursor = conn.cursor()
         cursor.execute(query, (self.today,))
