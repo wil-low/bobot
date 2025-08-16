@@ -422,14 +422,14 @@ class ETFAvalanches(AllocStrategy):
             if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                 d = self.data[ticker]
                 if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                    self.log(f"{ticker}: negative total return over the past year")
+                    self.log(f"{ticker}: -year")
                     if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
-                        self.log(f"{ticker}: negative total return over the past month")
+                        self.log(f"{ticker}: -month")
                         #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
                         rsi = AllocStrategy.compute_rsi(d.close).iloc[-10:]
-                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]}")
+                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]:.2f}")
                         if rsi.iloc[-1] > 70:
-                            self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
+                            #self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
                             threshold = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA * 2 / 100))  # make sure we are not too close to exit condition
                             if d.close.iloc[-21 * 1 - 1] > threshold:
                                 entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
@@ -499,10 +499,13 @@ class ETFAvalanches(AllocStrategy):
             if ticker != self.remains:
                 d = self.data[ticker]
                 if d.close.iloc[-1] > d.close.iloc[-21 * 1 - 1]:  # positive total return over the past month
+                    self.log(f"{ticker}: +month - to be closed")
                     result.add(ticker)
-                rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
-                if rsi < 15:
-                    result.add(ticker)
+                else:
+                    rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
+                    if rsi < 15:
+                        self.log(f"{ticker}: rsi {rsi} - to be closed")
+                        result.add(ticker)
         return result
 
 
@@ -621,7 +624,7 @@ class MeanReversion(AllocStrategy):
                     weekly_series = d.close.resample('W').last()
                     #print(weekly_series)
                     rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
-                    self.log(f"{ticker}: weekly rsi={rsi}")
+                    self.log(f"{ticker}: weekly rsi={rsi:.2f}")
                     if rsi > 80:
                         result.add(ticker)
                 stop_px = info['entry'] * (100 - self.STOP_SIZE) / 100  # the current price is more than STOP_SIZE% below the entry price
