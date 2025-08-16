@@ -44,6 +44,9 @@ def print_summary(p, keys):
     for t in sorted(summary.keys()):
         logger.info(f"    {t:5s}= {abs(summary[t])}")
     logger.info("")
+    logger.info(f"Totals: equity={p['equity']}, cash={p['cash']}")
+    for key in keys:
+        logger.info(f"    {key}: {floor2(p[key]['equity'] / p['equity'] * 100)}%")
 
 def next_working_day(today):
     next_date_str = None
@@ -65,16 +68,17 @@ def alpha_alloc(config, today, action, excluded_symbols):
         print(path)
         filename = os.path.basename(path)
         today = os.path.splitext(filename)[0]
-        #today = datetime.now().strftime('%Y-%m-%d')
+    elif today == 'today':
+        today = datetime.now().strftime('%Y-%m-%d')
     d = datetime.strptime(today, '%Y-%m-%d')
-    print(f"Alpha System start: {today}, weekday={d.weekday()}")
-    logger.info(f"Alpha System start: {today}, weekday={d.weekday()}")
+    print(f"Alpha Formula System start: {today}, weekday={d.weekday()}")
+    logger.info(f"Alpha Formula System start: {today}, weekday={d.weekday()}")
 
     if d.weekday() >= 5:
         print(f"{today} is a weekend")
         logger.warning(f"{today} is a weekend")
         today = next_working_day(today)
-        alpha_alloc(config, today, action)
+        alpha_alloc(config, today, action, excluded_symbols)
         return
 
     os.makedirs(work_dir, exist_ok=True)
@@ -128,11 +132,20 @@ def alpha_alloc(config, today, action, excluded_symbols):
                             action[key]['tickers'][ticker]['entry'] = p['entry']
                             logger.info(f"{prefix}: update ENTRY price")
 
+        # rebalance by adjusting cash
+        total_equity = action['equity']
+        for item in config['strategy']:
+            item_cash_diff = total_equity * item['percent'] / 100 - action[item['key']]['equity']
+            action[item['key']]['cash'] = floor2(action[item['key']]['cash'] + item_cash_diff)
+            action[item['key']]['equity'] = floor2(action[item['key']]['equity']+ item_cash_diff)
+
+        action['text'] = f"Synched at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         #compute_totals(sync, keys)
         fn = f"{work_dir}/sync_{today}.json"
         with open(fn, 'w') as f:
             json.dump(action, f, indent=4, sort_keys=True)
-
+        print_summary(action, keys)
         logger.info(f"Portfolio written to {fn}")
         return
 
@@ -141,7 +154,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
             if action == 'next':
                 with open(f"{work_dir}/{today}.json") as f:
                     portfolio = json.load(f)
-                    #print(self.portfolio)
+                    #print(portfolio)
             else:
                 raise FileNotFoundError('start')
         except FileNotFoundError:
@@ -185,24 +198,19 @@ def alpha_alloc(config, today, action, excluded_symbols):
     else:
         print(f"{today}: no transitions")
 
-    print_summary(new_portfolio, keys)
-
     if config.get('compute_totals', True):
         compute_totals(new_portfolio, keys)
-        logger.info(f"NEW TOTALS: equity={new_portfolio['equity']}, cash={new_portfolio['cash']}")
-        for key in keys:
-            logger.info(f"    {key}: {floor2(new_portfolio[key]['equity'] / new_portfolio['equity'] * 100)}%")
+    print_summary(new_portfolio, keys)
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
     save_portfolio(new_portfolio, f"{work_dir}/{next_date_str}.json")
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", required=True, help='config file name')
-    parser.add_argument("--date", "-d", help='date in format YYYY-MM-DD')
+    parser.add_argument("--date", "-d", help="date in format YYYY-MM-DD, or 'today'")
     parser.add_argument("--action", "-a", required=True, choices=['sync', 'start', 'next'], help="sync positions with broker, start empty or calculate next day")
     parser.add_argument("--exclude", "-x", required=False, help="temporarily exclude symbols (comma-separated) - for MeanReversion only")
     args = parser.parse_args()
