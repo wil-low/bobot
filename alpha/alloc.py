@@ -69,6 +69,8 @@ class AllocStrategy:
                     self.portfolio['cash'] += value
                     del self.portfolio['tickers'][ticker]
                     self.log(f"{ticker}: day order expired")
+                else:
+                    info['type'] = 'market'
         self.portfolio['cash'] = self.floor2(self.portfolio['cash'])
         # update prices by previous day close
         self.log(f"update prices:")
