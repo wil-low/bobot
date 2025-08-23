@@ -10,9 +10,9 @@
     "broker": "test",
     "leverage": 1,
     "strategy": [
-        {"key": "ra", "percent": 30, "class": "RisingAssets"},
-        {"key": "dt", "percent": 20, "class": "DynamicTreasures"},
-        {"key": "ea", "percent": 20, "class": "ETFAvalanches"},
-        {"key": "mr", "percent": 30, "class": "MeanReversion"}
+        {"key": "ra", "percent": 30, "module": "alpha_formula", "class": "RisingAssets"},
+        {"key": "dt", "percent": 20, "module": "alpha_formula", "class": "DynamicTreasures"},
+        {"key": "ea", "percent": 20, "module": "alpha_formula", "class": "ETFAvalanches"},
+        {"key": "mr", "percent": 30, "module": "alpha_formula", "class": "MeanReversion"}
     ]
 }

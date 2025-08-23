@@ -182,10 +182,9 @@ def alpha_alloc(config, today, action, excluded_symbols):
         "leverage": config['leverage']
     }
  
-    module = importlib.import_module("alloc")
-
     for item in config['strategy']:
         args = (logger, item['key'], portfolio.copy(), today)
+        module = importlib.import_module(f"strategy.{item['module']}")
         strategy_cls = getattr(module, item['class'])
         s = strategy_cls(*args)
         new_portfolio[s.key], trans = s.allocate(excluded_symbols)
@@ -200,7 +199,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
 
     if config.get('compute_totals', True):
         compute_totals(new_portfolio, keys)
-    print_summary(new_portfolio, keys)
+        print_summary(new_portfolio, keys)
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str
