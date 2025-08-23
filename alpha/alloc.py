@@ -437,7 +437,9 @@ class ETFAvalanches(AllocStrategy):
                                 entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
                                 daily_return = d.close / d.close.shift(1)
                                 volatility = daily_return.rolling(window=100).std()
-                                top.append({'ticker': ticker, 'entry': entry, 'volatility': volatility.iloc[-1]})
+                                top.append({'ticker': ticker, 'entry': entry, 'close': d.close.iloc[-1], 'rsi': rsi.iloc[-1], 'volatility': volatility.iloc[-1]})
+                            else:
+                                self.log(f"{ticker}: below threshold")
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
         self.log(f"alloc_slot = {alloc_slot:.2f}")
@@ -456,8 +458,13 @@ class ETFAvalanches(AllocStrategy):
                 if ticker != self.remains:
                     occupied_slots += 1
 
+        top = sorted(top, key=lambda x: x['volatility'], reverse=True)
+        self.log(f"Top candidates:")
+        for item in top:
+            self.log(f"   {item['ticker']:5s} vol={item['volatility']:.5f}, rsi={item['rsi']:.2f}, px={item['close']:.2f}")
+
         free_slots = self.SLOT_COUNT - occupied_slots
-        top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=True)[:free_slots]
+        top_sorted = top[:free_slots]
         free_slots -= len(top_sorted)
 
         for item in top_sorted:
@@ -551,10 +558,10 @@ class MeanReversion(AllocStrategy):
                             if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
                                 if close_month / close_now > 1.5:
                                     self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
-                                #print(f"allocate {ticker}: rsi {rsi}")
                                 daily_return = d.close / d.close.shift(1)
                                 volatility = daily_return.rolling(window=100).std()
-                                top.append({'ticker': ticker, 'volatility': volatility.iloc[-1]})
+                                #self.log(f"append {ticker}: rsi {rsi:.2f}, volatility {volatility.iloc[-1]:.5f}")
+                                top.append({'ticker': ticker, 'close': close_now, 'rsi': rsi, 'volatility': volatility.iloc[-1]})
                         except KeyError:
                             pass
             else:
@@ -577,8 +584,13 @@ class MeanReversion(AllocStrategy):
                 if ticker != self.remains:
                     occupied_slots += 1
 
+        top = sorted(top, key=lambda x: x['volatility'], reverse=False)
+        self.log(f"Top candidates:")
+        for item in top:
+            self.log(f"   {item['ticker']:5s} vol={item['volatility']:.5f}, rsi={item['rsi']:.2f}, px={item['close']:.2f}")
+
         free_slots = self.SLOT_COUNT - occupied_slots
-        top_sorted = sorted(top, key=lambda x: x['volatility'], reverse=False)[:free_slots]
+        top_sorted = top[:free_slots]
         free_slots -= len(top_sorted)
 
         for item in top_sorted:
@@ -734,7 +746,7 @@ class CRSISP500(AllocStrategy):
             alloc = round(alloc_slot / entry, 2)
             if alloc >= 1:
                 value = self.floor2(entry * alloc)
-                self.log(f"{item['ticker']}: px {entry}, {alloc}, val {value}, crsi {item['crsi']}")
+                self.log(f"{item['ticker']:5s} px {entry} * {alloc} = {value}, crsi {item['crsi']:.2f}")
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
                     'close': entry,
@@ -763,7 +775,7 @@ class CRSISP500(AllocStrategy):
                 'close': close,
                 'type': 'market'
             }
-            self.log(f"{self.remains}: px {close}, {alloc}, val {value} - remains")
+            self.log(f"{self.remains:5s} {close} * {alloc} = {value} - remains")
         elif self.remains in new_portfolio['tickers']:
             self.log(f"Close position: {self.remains}")
             del new_portfolio['tickers'][self.remains]
@@ -776,8 +788,8 @@ class CRSISP500(AllocStrategy):
             if ticker != self.remains:
                 d = self.data[ticker]
                 crsi = AllocStrategy.compute_crsi(d.close).iloc[-1]
-                self.log(f"{ticker}: crsi={crsi}")
                 if crsi > self.params['crsi_exit']:
+                    self.log(f"close {ticker}: crsi={crsi:.2f}")
                     result.add(ticker)
         return result
 
@@ -888,7 +900,7 @@ class TPS(AllocStrategy):
         for ticker, info in self.portfolio['tickers'].items():
             d = self.data[ticker]
             rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
-            self.log(f"{ticker}: rsi={rsi}")
+            self.log(f"{ticker}: rsi={rsi:.2f}")
             if info['qty'] > 0 and rsi > self.params['long_exit']:
                 result.add(ticker)
             if info['qty'] < 0 and rsi < self.params['short_exit']:
