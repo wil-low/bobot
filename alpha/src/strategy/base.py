@@ -190,6 +190,40 @@ class AllocStrategy:
 
         return atr
 
+    @staticmethod
+    def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14):
+        # --- Step 1: Differences ---
+        up_move = high.diff()
+        down_move = low.shift(1) - low
+
+        # --- Step 2: +DM and -DM ---
+        plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+        minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+        plus_dm = pd.Series(plus_dm, index=high.index)
+        minus_dm = pd.Series(minus_dm, index=high.index)
+
+        # --- Step 3: True Range (TR) ---
+        tr1 = high - low
+        tr2 = (high - close.shift(1)).abs()
+        tr3 = (low - close.shift(1)).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        # --- Step 4: Wilder’s smoothing with EMA ---
+        atr = tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+        plus_dm_smoothed = plus_dm.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+        minus_dm_smoothed = minus_dm.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+
+        # --- Step 5: DI calculations ---
+        plus_di = 100 * (plus_dm_smoothed / atr)
+        minus_di = 100 * (minus_dm_smoothed / atr)
+
+        # --- Step 6: DX and ADX ---
+        dx = (100 * (plus_di - minus_di).abs() / (plus_di + minus_di))
+        adx = dx.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+
+        return adx, plus_di, minus_di
+
     def floor2(self, val):
         return int(val * 100) / 100
 
@@ -217,7 +251,7 @@ class AllocStrategy:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
                 if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
-                if self.key == 'mr' and old_qty == 0 and 'stop' in new_tickers[ticker]:
+                if old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
                 adds.append({
                     'ticker': ticker,
@@ -231,6 +265,8 @@ class AllocStrategy:
                 text = f'Sell {diff} of {ticker}, change from {old_qty} to {new_qty}'
                 if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
                     text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
+                if old_qty == 0 and 'stop' in new_tickers[ticker]:
+                    text += f", stop {new_tickers[ticker]['stop']}"
                 removes.append({
                     'ticker': ticker,
                     'action': 'sell',
