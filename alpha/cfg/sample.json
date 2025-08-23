@@ -5,7 +5,7 @@
         "bot_token": "<BOT_TOKEN>",
         "channel_id": "<CHANNEL_ID>"
     },
-    "initial_cash": 10000,
+    "initial_balance": 10000,
     "subdir": "test",
     "broker": "test",
     "leverage": 1,

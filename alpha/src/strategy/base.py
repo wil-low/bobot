@@ -11,12 +11,12 @@ import pandas as pd
 class AllocStrategy:
     DB_FILE = "work/stock.sqlite"
     ALLOC_PERCENT = 99.5
+    leverage = 1
 
     def __init__(self, logger, key, portfolio, today, limit=253):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio[key]
-        self.leverage = portfolio['leverage']
         self.today = today
         self.rebalance = False
 
@@ -55,36 +55,38 @@ class AllocStrategy:
         # expire Day Limit orders
         for ticker in list(self.portfolio['tickers'].keys()):
             info = self.portfolio['tickers'][ticker]
-            if info['type'] == 'limit':
+            if info['type'] != 'market':
                 #self.log(self.data[ticker].close.iloc[-10:])
-                entry = info['close']
+                entry = info['entry']
                 qty = info['qty']
-                #open = self.data[ticker].open.iloc[-1]
+                open = self.data[ticker].open.iloc[-1]
                 low = self.data[ticker].low.iloc[-1]
                 high = self.data[ticker].high.iloc[-1]
-                #close = self.data[ticker].close.iloc[-1]
-                #self.log(f"{ticker}: check expire: entry {entry}, open {open}, low {low}, high {high}, close {close}")
-                if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
-                    value = self.floor2(abs(entry * qty))
-                    self.portfolio['cash'] += value
-                    del self.portfolio['tickers'][ticker]
-                    self.log(f"{ticker}: day order expired")
-                else:
-                    info['type'] = 'market'
-        self.portfolio['cash'] = self.floor2(self.portfolio['cash'])
+                close = self.data[ticker].close.iloc[-1]
+                self.log(f"{ticker}: check expire for {'BUY' if info['qty'] > 0 else 'SELL'} {info['type']}: entry {entry}, open {open}, low {low}, high {high}, close {close}")
+                if info['type'] == 'limit':
+                    if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
+                        del self.portfolio['tickers'][ticker]
+                        self.log(f"{ticker}: day order expired")
+                    else:
+                        info['type'] = 'market'
+                elif info['type'] == 'stop':
+                    if not ((qty > 0 and entry < high) or (qty < 0 and entry > low)):  # not filled
+                        del self.portfolio['tickers'][ticker]
+                        self.log(f"{ticker}: day order expired")
+                    else:
+                        info['type'] = 'market'
+
         # update prices by previous day close
         self.log(f"update prices:")
-        equity = self.portfolio['cash']
         for ticker, info in self.portfolio['tickers'].items():
             close = self.data[ticker].close.iloc[-1]
             info['close'] = close
-            value = self.floor2(abs(close * info['qty'] / self.leverage))
-            equity += value
-            self.log(f"   {ticker}: {close} * {info['qty']} = {value}")
-        equity = self.floor2(equity)
-        self.compute_cash(self.portfolio, equity)
-        self.allocatable = self.floor2(self.portfolio['equity'] * self.ALLOC_PERCENT / 100 * self.leverage)  # reserve for fees
-        self.log(f"equity={self.portfolio['equity']}, cash={self.portfolio['cash']}, allocatable={self.allocatable}")
+            margin = self.floor2(abs(close * info['qty'] / self.leverage))
+            self.log(f"   {ticker}: {close} * {info['qty']} = {margin}")
+        self.compute_summary(self.portfolio, self.portfolio['summary'])
+        self.allocatable = self.floor2(self.portfolio['summary']['equity'] * self.ALLOC_PERCENT / 100 * self.leverage)  # reserve for fees
+        self.log(f"equity={self.portfolio['summary']['equity']}, balance={self.portfolio['summary']['balance']}, allocatable={self.allocatable}")
 
     @staticmethod
     def load_tickers(fn):
@@ -247,10 +249,15 @@ class AllocStrategy:
             new_qty = new_tickers.get(ticker, {}).get('qty', 0)
 
             diff = round(new_qty - old_qty, 2)
+            #self.log(f"{ticker}, old_qty {old_qty}, new_qty {new_qty}, diff {diff}")
+            close_pos = False
             if diff > 0:
                 text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
-                if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
-                    text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
+                if ticker in new_tickers:
+                    if new_tickers[ticker]['type'] == 'limit':
+                        text += f", using DAY LIMIT order at {new_tickers[ticker]['entry']}"
+                    elif new_tickers[ticker]['type'] == 'stop':
+                        text += f", using DAY STOP order at {new_tickers[ticker]['entry']}"
                 if old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
                 adds.append({
@@ -259,24 +266,33 @@ class AllocStrategy:
                     'qty': diff,
                     'text': text
                 })
-                #print(ticker, self.data[ticker].close.iloc[-1], diff, 'new_cash increased', new_portfolio['cash'])
+                if old_qty < 0:
+                    close_pos = True  # close short
             elif diff < 0:
-                diff = abs(diff)
-                text = f'Sell {diff} of {ticker}, change from {old_qty} to {new_qty}'
-                if ticker in new_tickers and new_tickers[ticker]['type'] == 'limit':
-                    text += f", using DAY LIMIT order at {new_tickers[ticker]['close']}"
+                text = f'Sell {-diff} of {ticker}, change from {old_qty} to {new_qty}'
+                if ticker in new_tickers:
+                    if new_tickers[ticker]['type'] == 'limit':
+                        text += f", using DAY LIMIT order at {new_tickers[ticker]['entry']}"
+                    elif new_tickers[ticker]['type'] == 'stop':
+                        text += f", using DAY STOP order at {new_tickers[ticker]['entry']}"
                 if old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
                 removes.append({
                     'ticker': ticker,
                     'action': 'sell',
-                    'qty': diff,
+                    'qty': -diff,
                     'text': text
                 })
-                #print(ticker, self.data[ticker].close.iloc[-1], diff, 'new_cash reduced', new_portfolio['cash'])
-            # If equal, no action needed
+                if old_qty > 0:
+                    close_pos = True  # close long
+            if close_pos:
+                diff = abs(diff) * (1 if old_qty > 0 else -1)
+                upnl = self.floor2((old_tickers[ticker]['close'] - old_tickers[ticker]['entry']) * diff)
+                self.log(f"{ticker}, close pos, ({old_tickers[ticker]['close']} - {old_tickers[ticker]['entry']}) * {diff} = {upnl}")
+                old_portfolio['summary']['upnl'] -= upnl
+                old_portfolio['summary']['balance'] += upnl
 
-        self.compute_cash(new_portfolio, old_portfolio['equity'])
+        self.compute_summary(new_portfolio, old_portfolio['summary'])
         self.log(f"old_p: {self.print_p(old_portfolio)}")
         self.log(f"new_p: {self.print_p(new_portfolio)}")
         return removes + adds
@@ -292,19 +308,27 @@ class AllocStrategy:
             self.logger.debug('%s: %s' % (self.key, txt))
         print('%s: %s' % (self.key, txt))
 
-    def compute_cash(self, portfolio, prev_equity):
-        portfolio['equity'] = prev_equity
-        cash = prev_equity
-        #print(f"compute_eq: cash {cash}")
+    def compute_summary(self, portfolio, prev_summary):
+        balance = prev_summary['balance']
+        equity = 0
+        margin = 0
+        free_margin = 0
+        upnl = 0
+
         for ticker, info in portfolio['tickers'].items():
-            close = info['close']  #self.data[ticker].close.iloc[-1]
-            #info['close'] = close
-            value = self.floor2(abs(close * info['qty'] / self.leverage))
-            cash -= value
-            #print(f"compute_eq: {ticker}, {close}, {info['qty']}, {value}")
-        #print(f"compute_eq: cash={cash}\n")
-        portfolio['cash'] = self.floor2(cash)
-        return cash
+            value = abs(info['entry'] * info['qty'] / self.leverage)
+            upnl += (info['close'] - info['entry']) * info['qty']
+            margin += value
+
+        equity = balance + upnl
+        portfolio['summary'] = {
+            'balance': self.floor2(balance),
+            'equity': self.floor2(equity),
+            'margin': self.floor2(margin),
+            'free_margin': self.floor2(equity - margin),
+            'upnl': self.floor2(upnl)
+        }
+        return balance
 
     def allocate(self, excluded_symbols):
         raise NotImplementedError

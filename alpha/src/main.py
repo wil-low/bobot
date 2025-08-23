@@ -8,6 +8,7 @@ import sys
 import time
 import glob
 import importlib
+from strategy.base import AllocStrategy
 from loguru import logger  # pip install loguru
 
 from broker import RStockTrader
@@ -22,13 +23,25 @@ def floor2(val):
 
 def compute_totals(p, keys):
     equity = 0
-    cash = 0
+    balance = 0
+    margin = 0
+    free_margin = 0
+    upnl = 0
+    p['summary'] = {}
     for key in keys:
         if key in p:
-            equity += p[key]['equity']
-            cash += p[key]['cash']
-    p['equity'] = floor2(equity)
-    p['cash'] = floor2(cash)
+            s = p[key]['summary']
+            equity += s['equity']
+            balance += s['balance']
+            margin += s['margin']
+            free_margin += s['free_margin']
+            upnl += s['upnl']
+    s = p['summary']
+    s['equity'] = floor2(equity)
+    s['balance'] = floor2(balance)
+    s['margin'] = floor2(margin)
+    s['free_margin'] = floor2(free_margin)
+    s['upnl'] = floor2(upnl)
 
 def save_portfolio(p, fn):
     with open(fn, 'w') as f:
@@ -44,9 +57,10 @@ def print_summary(p, keys):
     for t in sorted(summary.keys()):
         logger.info(f"    {t:5s}= {abs(summary[t])}")
     logger.info("")
-    logger.info(f"Totals: equity={p['equity']}, cash={p['cash']}")
+    s = p['summary']
+    logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
     for key in keys:
-        logger.info(f"    {key}: {floor2(p[key]['equity'] / p['equity'] * 100)}%")
+        logger.info(f"    {key}: {floor2(p[key]['summary']['equity'] / p['summary']['equity'] * 100)}%")
 
 def next_working_day(today):
     next_date_str = None
@@ -86,39 +100,40 @@ def alpha_alloc(config, today, action, excluded_symbols):
 
     keys = [item['key'] for item in config['strategy']]
 
+    AllocStrategy.leverage = config['leverage']
+
     if action == 'sync':
         # we assume tickers are correctly assigned to keys
         with open(f"{work_dir}/{today}.json") as f:
             portfolio = json.load(f)
             #print(self.portfolio)
 
-        logger.info(f"Getting portfolio from broker {config['broker']}")
+        logger.info(f"Getting portfolio for date {today} from broker {config['broker']}")
         # get portfolio from broker
         broker = RStockTrader(config['auth'])
         print(broker.positions)
         action = {
-            "cash": broker.getcash(),
-            "equity": broker.getvalue(),
-            "leverage": config['leverage']
+            "summary": {
+                #"balance": broker.getcash(),
+                #"equity": broker.getvalue()
+            }
         }
         for item in config['strategy']:
             action[item['key']] = {
                 'tickers': {},
-                'cash': 0,
-                'equity': 0
+                'summary': {}
             }
 
         # scan all keys and update tickers
         for key in keys:
-            action[key]['cash'] = portfolio[key]['cash']
-            action[key]['equity'] = portfolio[key]['equity']
+            s = action[key]['summary']
             for ticker, info in portfolio[key]['tickers'].items():
                 p = broker.positions.get(ticker, None)
                 prefix = "%2s - %-6s" % (key, ticker)
                 if p is None:
-                    if info['type'] == 'limit':
+                    if info['type'] == 'limit' or info['type'] == 'stop':
                         # limit day order was not filled
-                        action[key]['cash'] += floor2(info['qty'] * info['close'])
+                        #s['cash'] += floor2(info['qty'] * info['close'])
                         logger.info(f"{prefix}: REMOVE limit order")
                         continue
                 else:
@@ -126,22 +141,28 @@ def alpha_alloc(config, today, action, excluded_symbols):
                     if action[key]['tickers'][ticker]['close'] != p['close']:
                         action[key]['tickers'][ticker]['close'] = p['close']
                         logger.info(f"{prefix}: update CLOSE price")
-                    if key == 'mr':
-                        logger.info(f"{prefix}: check {ticker}")
-                        if action[key]['tickers'][ticker]['entry'] != p['entry']:
-                            action[key]['tickers'][ticker]['entry'] = p['entry']
-                            logger.info(f"{prefix}: update ENTRY price")
+                    if action[key]['tickers'][ticker].get('entry', None) != p['entry']:
+                        action[key]['tickers'][ticker]['entry'] = p['entry']
+                        logger.info(f"{prefix}: update ENTRY price")
+            s['margin'] = 0
+            s['upnl'] = 0
+            for ticker, info in action[key]['tickers'].items():
+                s['margin'] += abs(info['qty']) * info['entry']
+                s['upnl'] += (info['close'] - info['entry']) * info['qty']
+            s['margin'] = floor2(s['margin'])
+            s['upnl'] = floor2(s['upnl'])
 
-        # rebalance by adjusting cash
-        total_equity = action['equity']
+        save_portfolio(action, f"{work_dir}/sync.json")
+        # rebalance by adjusting balances
+        total_equity = broker.getvalue()
         for item in config['strategy']:
-            item_cash_diff = total_equity * item['percent'] / 100 - action[item['key']]['equity']
-            action[item['key']]['cash'] = floor2(action[item['key']]['cash'] + item_cash_diff)
-            action[item['key']]['equity'] = floor2(action[item['key']]['equity']+ item_cash_diff)
-
+            s = action[item['key']]['summary']
+            s['equity'] = floor2(total_equity * item['percent'] / 100)
+            s['balance'] = floor2(s['equity'] - s['upnl'])
+            s['free_margin'] = floor2(s['equity'] - s['margin'])
         action['text'] = f"Synched at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-        #compute_totals(sync, keys)
+        compute_totals(action, keys)
         fn = f"{work_dir}/sync_{today}.json"
         with open(fn, 'w') as f:
             json.dump(action, f, indent=4, sort_keys=True)
@@ -158,28 +179,35 @@ def alpha_alloc(config, today, action, excluded_symbols):
             else:
                 raise FileNotFoundError('start')
         except FileNotFoundError:
-            cash = config['initial_cash']
-            logger.debug(f"Starting with empty portfolio: {cash}")
+            balance = config['initial_balance']
+            logger.debug(f"Starting with empty portfolio: {balance}")
             portfolio = {
                 'date': today,
-                'cash': cash,
-                'equity': cash,
-                'leverage': config['leverage']
+                'summary': {
+                    'balance': balance,
+                    'equity': balance,
+                    'margin': 0,
+                    'free_margin': balance,
+                    'upnl': 0
+                }
             }
             for item in config['strategy']:
-                item_cash = floor2(cash * item['percent'] / 100)
+                item_balance = floor2(balance * item['percent'] / 100)
                 portfolio[item['key']] = {
                     'tickers': {},
-                    'cash': item_cash,
-                    'equity': item_cash
+                    'summary': {
+                        'balance': item_balance,
+                        'equity': item_balance,
+                        'margin': 0,
+                        'free_margin': balance,
+                        'upnl': 0
+                    }
                 }
             compute_totals(portfolio, keys)
             save_portfolio(portfolio, f"{work_dir}/{today}.json")
 
     new_portfolio = {
-        "transitions": {},
-        "cash": 0,
-        "leverage": config['leverage']
+        "transitions": {}
     }
  
     for item in config['strategy']:

@@ -48,7 +48,7 @@ class RisingAssets(AllocStrategy):
                 self.log(f"{ticker}: score={score:.2f}, rev_vol={rev_vol:.2f}")
                 top.append({'ticker': ticker, 'score': score, 'rev_vol': rev_vol})
             
-            new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
+            new_portfolio = {'tickers': {}}
             vol_sum = 0
             top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
             for item in top_sorted:
@@ -65,6 +65,7 @@ class RisingAssets(AllocStrategy):
                     self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
                     new_portfolio['tickers'][item['ticker']] = {
                         'qty': alloc,
+                        'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                         'close': close,
                         'type': 'market'
                     }
@@ -103,7 +104,7 @@ class DynamicTreasures(AllocStrategy):
                     self.log(f"{ticker}: score={score}")
                     top.append({'ticker': ticker, 'score': score})
             
-            new_portfolio = {'tickers': {}, 'cash': self.portfolio['cash']}
+            new_portfolio = {'tickers': {}}
             remains_alloc = self.allocatable
             for item in top:
                 alloc = 0
@@ -117,6 +118,7 @@ class DynamicTreasures(AllocStrategy):
                         self.log(f"{item['ticker']}: px {close}, {alloc}, val {value}")
                         new_portfolio['tickers'][item['ticker']] = {
                             'qty': alloc,
+                            'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                             'close': close,
                             'type': 'market'
                         }
@@ -130,6 +132,7 @@ class DynamicTreasures(AllocStrategy):
                 new_portfolio['tickers'][self.remains] = {
                     '-remains': True,
                     'qty': alloc,
+                    'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
                     'close': close,
                     'type': 'market'
                 }
@@ -210,6 +213,7 @@ class ETFAvalanches(AllocStrategy):
                 self.log(f"{item['ticker']}: px {entry}, {alloc}, val {value}")
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
+                    'entry': entry if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                     'close': entry,
                     'type': 'limit'
                 }
@@ -225,6 +229,7 @@ class ETFAvalanches(AllocStrategy):
             new_portfolio['tickers'][self.remains] = {
                 '-remains': True,
                 'qty': alloc,
+                'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
                 'close': close,
                 'type': 'market'
             }
@@ -334,7 +339,7 @@ class MeanReversion(AllocStrategy):
             if alloc >= 1:
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
-                    'entry': close,
+                    'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
                     'close': close,
                     'stop': self.floor2(close * (100 - self.STOP_SIZE) / 100),
                     'type': 'market'
@@ -351,7 +356,7 @@ class MeanReversion(AllocStrategy):
             new_portfolio['tickers'][self.remains] = {
                 '-remains': True,
                 'qty': alloc,
-                'entry': close,
+                'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                 'close': close,
                 'type': 'market'
             }
