@@ -88,7 +88,19 @@ def alpha_alloc(config, today, action, excluded_symbols):
     print(f"Alpha Formula System start: {today}, weekday={d.weekday()}")
     logger.info(f"Alpha Formula System start: {today}, weekday={d.weekday()}")
 
-    if d.weekday() >= 5:
+    latest_date = today
+
+    if action == 'sync':
+        # don't skip weekends, always use the latest portfolio from the past
+        path = sorted(glob.glob(f"{work_dir}/[0-9]*.json"), reverse=True)
+        for fn in path:
+            print(fn)
+            filename = os.path.basename(fn)
+            fn_date = os.path.splitext(filename)[0]
+            if fn_date < today:
+                latest_date = fn_date
+                break
+    elif d.weekday() >= 5:
         print(f"{today} is a weekend")
         logger.warning(f"{today} is a weekend")
         today = next_working_day(today)
@@ -104,11 +116,11 @@ def alpha_alloc(config, today, action, excluded_symbols):
 
     if action == 'sync':
         # we assume tickers are correctly assigned to keys
-        with open(f"{work_dir}/{today}.json") as f:
+        with open(f"{work_dir}/{latest_date}.json") as f:
             portfolio = json.load(f)
             #print(self.portfolio)
 
-        logger.info(f"Getting portfolio for date {today} from broker {config['broker']}")
+        logger.info(f"Getting portfolio for date {latest_date} from broker {config['broker']}")
         # get portfolio from broker
         broker = RStockTrader(config['auth'])
         print(broker.positions)
@@ -138,6 +150,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
                         continue
                 else:
                     action[key]['tickers'][ticker] = info
+                    action[key]['tickers'][ticker]['qty'] = p['qty']
                     if action[key]['tickers'][ticker]['close'] != p['close']:
                         action[key]['tickers'][ticker]['close'] = p['close']
                         logger.info(f"{prefix}: update CLOSE price")
@@ -262,4 +275,6 @@ if __name__ == '__main__':
 
     excluded_symbols = [] if args.exclude is None else args.exclude.split(',')
 
+    if args.action == 'sync':
+        today = 'today'
     alpha_alloc(config, today, args.action, excluded_symbols)
