@@ -97,7 +97,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
             print(fn)
             filename = os.path.basename(fn)
             fn_date = os.path.splitext(filename)[0]
-            if fn_date < today:
+            if fn_date <= today:
                 latest_date = fn_date
                 break
     elif d.weekday() >= 5:

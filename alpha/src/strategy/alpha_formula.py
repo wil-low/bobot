@@ -59,7 +59,7 @@ class RisingAssets(AllocStrategy):
                 close = self.data[item['ticker']].close.iloc[-1]
                 alloc_perc = item['rev_vol'] / vol_sum
                 alloc_cash = self.allocatable * alloc_perc
-                alloc = int(alloc_cash / close)
+                alloc = round(alloc_cash / close)
                 if alloc >= 1:
                     value = self.floor2(close * alloc)
                     self.log(f"{item['ticker']}: px {close}, {alloc}, val {value} ({alloc_perc * 100:.2f}%)")
@@ -356,7 +356,7 @@ class MeanReversion(AllocStrategy):
             new_portfolio['tickers'][self.remains] = {
                 '-remains': True,
                 'qty': alloc,
-                'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
+                'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
                 'close': close,
                 'type': 'market'
             }
@@ -379,9 +379,10 @@ class MeanReversion(AllocStrategy):
                     self.log(f"{ticker}: weekly rsi={rsi:.2f}")
                     if rsi > 80:
                         result.add(ticker)
-                stop_px = info['entry'] * (100 - self.STOP_SIZE) / 100  # the current price is more than STOP_SIZE% below the entry price
+                stop_px = info['stop']
                 low = d.low.iloc[-1]
                 high = d.high.iloc[-1]
+                #self.log(f"{ticker}: checking stop {stop_px} vs high {high}, low {low}")
                 if low < stop_px:  # stop order triggered
                     result.add(ticker)
         return result
