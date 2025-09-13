@@ -51,7 +51,7 @@ update prices set
 	adjLow = low / 4,
 	adjOpen = open / 4,
 	adjVolume = volume * 4,
-	splitFactor = 4
+	splitFactor = splitFactor * 4
 where ticker_id=6509 and date < '2025-06-17';
 ```
 
