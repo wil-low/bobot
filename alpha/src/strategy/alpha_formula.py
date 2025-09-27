@@ -312,20 +312,23 @@ class MeanReversion(AllocStrategy):
         if len(tickers_to_close) > 0:
             self.log(f"Close positions: {tickers_to_close}")
 
+        free_value = self.allocatable
         occupied_slots = 0
         # remove closed tickers
         for ticker in list(new_portfolio['tickers'].keys()):
-            info = new_portfolio['tickers'][ticker]
             if ticker in tickers_to_close:
                 del new_portfolio['tickers'][ticker]
             else:
                 if ticker != self.remains:
                     occupied_slots += 1
+                    info = new_portfolio['tickers'][ticker]
+                    free_value -= info['close'] * info['qty']
 
         top = sorted(top, key=lambda x: x['volatility'], reverse=False)
+        self.log(f"Excluded_symbols: {excluded_symbols}")
         self.log(f"Top candidates:")
         for item in top:
-            self.log(f"   {item['ticker']:5s} vol={item['volatility']:.5f}, rsi={item['rsi']:.2f}, px={item['close']:.2f}")
+            self.log(f"   {item['ticker']:5s} vol {item['volatility']:.5f}, rsi {item['rsi']:5.2f}, px {item['close']:6.2f}")
 
         free_slots = self.SLOT_COUNT - occupied_slots
         top_sorted = top[:free_slots]
@@ -344,12 +347,14 @@ class MeanReversion(AllocStrategy):
                     'stop': self.floor2(close * (100 - self.STOP_SIZE) / 100),
                     'type': 'market'
                 }
+                free_value -= value
             else:
                 self.error(f"{ticker} doesn't fit into alloc ({alloc})")
                 free_slots += 1
         # remains alloc
         close = self.data[self.remains].close.iloc[-1]
-        alloc = int(alloc_slot * free_slots / close)
+        #self.log(f"free_value {self.floor2(free_value)}, close {close}")
+        alloc = int(free_value / close)
         if alloc >= 1:
             close = self.data[self.remains].close.iloc[-1]
             value = self.floor2(close * alloc)

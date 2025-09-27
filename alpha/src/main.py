@@ -8,6 +8,7 @@ import sys
 import time
 import glob
 import importlib
+import sqlite3
 from strategy.base import AllocStrategy
 from loguru import logger  # pip install loguru
 
@@ -44,10 +45,26 @@ def compute_totals(p, keys):
     s['upnl'] = floor2(upnl)
 
 def save_portfolio(p, fn):
+    logger.info(f"Saving portfolio to {fn}")
     with open(fn, 'w') as f:
         json.dump(p, f, indent=4, sort_keys=True)
 
 def print_summary(p, keys):
+    # load ticker descriptions from DB
+    conn = sqlite3.connect(AllocStrategy.DB_FILE)
+
+    query = f"""
+    SELECT t.symbol, t.type, t.name FROM tickers t
+    WHERE t.disabled = 0
+    ORDER BY t.symbol
+    """
+    cursor = conn.cursor()
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    names = {}
+    for row in rows:
+        names[row[0]] = (row[1], row[2])
+
     logger.info("Portfolio summary:")
     summary = {} 
     for key in keys:
@@ -55,8 +72,8 @@ def print_summary(p, keys):
             for t, data in p[key]['tickers'].items():
                 summary[t] = summary.get(t, 0) + data['qty'];
     for t in sorted(summary.keys()):
-        logger.info(f"    {t:5s}= {abs(summary[t])}")
-    logger.info("")
+        logger.info(f"    {t:6s}= {abs(summary[t]):6.2f}    {names[t][0]:4s}  {names[t][1]}")
+    logger.info('')
     s = p['summary']
     logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
     for key in keys:
@@ -150,13 +167,14 @@ def alpha_alloc(config, today, action, excluded_symbols):
                         continue
                 else:
                     action[key]['tickers'][ticker] = info
-                    action[key]['tickers'][ticker]['qty'] = p['qty']
+                    if ticker != 'JPST':
+                        action[key]['tickers'][ticker]['qty'] = p['qty']
                     if action[key]['tickers'][ticker]['close'] != p['close']:
                         action[key]['tickers'][ticker]['close'] = p['close']
-                        logger.info(f"{prefix}: update CLOSE price")
+                        logger.info(f"{prefix}: update CLOSE, qty {action[key]['tickers'][ticker]['qty']}")
                     if action[key]['tickers'][ticker].get('entry', None) != p['entry']:
                         action[key]['tickers'][ticker]['entry'] = p['entry']
-                        logger.info(f"{prefix}: update ENTRY price")
+                        logger.info(f"{prefix}: update ENTRY")
             s['margin'] = 0
             s['upnl'] = 0
             for ticker, info in action[key]['tickers'].items():
@@ -187,6 +205,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
         try:
             if action == 'next':
                 with open(f"{work_dir}/{today}.json") as f:
+                    logger.info(f"Reading portfolio from {work_dir}/{today}.json")
                     portfolio = json.load(f)
                     #print(portfolio)
             else:
@@ -275,6 +294,6 @@ if __name__ == '__main__':
 
     excluded_symbols = [] if args.exclude is None else args.exclude.split(',')
 
-    if args.action == 'sync':
-        today = 'today'
+    #if args.action == 'sync':
+    #    today = 'today'
     alpha_alloc(config, today, args.action, excluded_symbols)
