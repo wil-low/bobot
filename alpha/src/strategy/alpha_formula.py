@@ -52,7 +52,7 @@ class RisingAssets(AllocStrategy):
             vol_sum = 0
             top_sorted = sorted(top, key=lambda x: x['score'], reverse=True)[:5]
             for item in top_sorted:
-                #print(f"{item['ticker']}: {item['rev_vol']}, {value}")
+                #print(f"{item['ticker']}: {item['rev_vol']:.2f}, {item['score']:.2f}")
                 vol_sum += item['rev_vol']
 
             for item in top_sorted:
@@ -275,7 +275,7 @@ class MeanReversion(AllocStrategy):
 
     def allocate(self, excluded_symbols):
         trend_d = self.data[self.long_trend_ticker].close
-        tickers_to_close = self.to_be_closed()
+        tickers_to_close = self.to_be_closed(excluded_symbols)
         new_portfolio = copy.deepcopy(self.portfolio)
         top = []
         if self.rebalance:  # These rules are checked at the end of the business week
@@ -372,10 +372,10 @@ class MeanReversion(AllocStrategy):
 
         return new_portfolio, self.compute_portfolio_transition(self.portfolio, new_portfolio)
 
-    def to_be_closed(self):
+    def to_be_closed(self, excluded_symbols):
         result = set()  # tickers for positions to be closed
         for ticker, info in self.portfolio['tickers'].items():
-            if ticker != self.remains:
+            if ticker != self.remains and ticker not in excluded_symbols:
                 d = self.data[ticker]
                 if self.weekday == 0:  # Monday (end of week in fact)
                     weekly_series = d.close.resample('W').last()
