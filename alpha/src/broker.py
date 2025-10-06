@@ -47,10 +47,12 @@ class RStockTrader:
                         pos = {
                             'side': item['side'],
                             'qty': abs(item['volume']),
+                            'entry_time': item['open_time'],
                             'entry': item['open_price'],
                             'close': item['close_price'],
                             'type': 'limit' if item['side'] == 'sell' else 'market'
                         }
+                        #print(f"{ticker},{pos['qty']},{pos['entry']},{pos['close']}")
                         self.positions[ticker] = pos
                 skip += 100
             else:

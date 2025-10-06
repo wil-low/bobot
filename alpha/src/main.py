@@ -175,6 +175,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
                     if action[key]['tickers'][ticker].get('entry', None) != p['entry']:
                         action[key]['tickers'][ticker]['entry'] = p['entry']
                         logger.info(f"{prefix}: update ENTRY")
+                    action[key]['tickers'][ticker]['entry_time'] = p['entry_time']
             s['margin'] = 0
             s['upnl'] = 0
             for ticker, info in action[key]['tickers'].items():
@@ -194,7 +195,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
         action['text'] = f"Synched at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
         compute_totals(action, keys)
-        fn = f"{work_dir}/sync_{today}.json"
+        fn = f"{work_dir}/{today}_sync.json"
         with open(fn, 'w') as f:
             json.dump(action, f, indent=4, sort_keys=True)
         print_summary(action, keys)

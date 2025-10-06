@@ -18,6 +18,7 @@ class AllocStrategy:
         self.logger = logger
         self.portfolio = portfolio[key]
         self.today = today
+        self.today_open = int(datetime.strptime(today + " 16:30", "%Y-%m-%d %H:%M").timestamp())  # US Market Open in UA timezone
         self.rebalance = False
 
         self.log('')

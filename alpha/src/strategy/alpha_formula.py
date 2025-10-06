@@ -66,6 +66,7 @@ class RisingAssets(AllocStrategy):
                     new_portfolio['tickers'][item['ticker']] = {
                         'qty': alloc,
                         'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
+                        'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                         'close': close,
                         'type': 'market'
                     }
@@ -119,6 +120,7 @@ class DynamicTreasures(AllocStrategy):
                         new_portfolio['tickers'][item['ticker']] = {
                             'qty': alloc,
                             'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
+                            'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                             'close': close,
                             'type': 'market'
                         }
@@ -133,6 +135,7 @@ class DynamicTreasures(AllocStrategy):
                     '-remains': True,
                     'qty': alloc,
                     'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
+                    'entry_time': self.today_open if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry_time'],
                     'close': close,
                     'type': 'market'
                 }
@@ -214,6 +217,7 @@ class ETFAvalanches(AllocStrategy):
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
                     'entry': entry if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
+                    'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                     'close': entry,
                     'type': 'limit'
                 }
@@ -230,6 +234,7 @@ class ETFAvalanches(AllocStrategy):
                 '-remains': True,
                 'qty': alloc,
                 'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
+                'entry_time': self.today_open if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry_time'],
                 'close': close,
                 'type': 'market'
             }
@@ -260,6 +265,9 @@ class MeanReversion(AllocStrategy):
     # Rebalances weekly, checks stops daily
     SLOT_COUNT = 10
     STOP_SIZE = 5  # percents
+    TTL_DAYS = 45  # close position after TTL_DAYS
+
+    TTL_SECS = TTL_DAYS * 24 * 60 * 60
 
     def __init__(self, logger, key, portfolio, today):
         self.long_trend_ticker = 'SPLG'
@@ -343,6 +351,7 @@ class MeanReversion(AllocStrategy):
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
                     'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
+                    'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                     'close': close,
                     'stop': self.floor2(close * (100 - self.STOP_SIZE) / 100),
                     'type': 'market'
@@ -362,6 +371,7 @@ class MeanReversion(AllocStrategy):
                 '-remains': True,
                 'qty': alloc,
                 'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
+                'entry_time': self.today_open if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry_time'],
                 'close': close,
                 'type': 'market'
             }
@@ -384,6 +394,10 @@ class MeanReversion(AllocStrategy):
                     self.log(f"{ticker}: weekly rsi={rsi:.2f}")
                     if rsi > 80:
                         result.add(ticker)
+                    else:
+                        if self.today_open - info['entry_time'] >= self.TTL_SECS:
+                            self.log(f"{ticker}: TTL expired")
+                            result.add(ticker)
                 stop_px = info['stop']
                 low = d.low.iloc[-1]
                 high = d.high.iloc[-1]
