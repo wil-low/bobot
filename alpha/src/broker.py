@@ -46,11 +46,11 @@ class RStockTrader:
                             ticker = ticker[0:pos]
                         pos = {
                             'side': item['side'],
-                            'qty': abs(item['volume']),
+                            'qty': -item['volume'] if item['side'] == 'sell' else item['volume'],
                             'entry_time': item['open_time'],
                             'entry': item['open_price'],
                             'close': item['close_price'],
-                            'type': 'limit' if item['side'] == 'sell' else 'market'
+                            'type': 'market'
                         }
                         #print(f"{ticker},{pos['qty']},{pos['entry']},{pos['close']}")
                         self.positions[ticker] = pos
