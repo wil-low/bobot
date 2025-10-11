@@ -350,7 +350,7 @@ class MeanReversion(AllocStrategy):
             if alloc >= 1:
                 new_portfolio['tickers'][item['ticker']] = {
                     'qty': alloc,
-                    'entry': close if self.remains not in self.portfolio['tickers'] else self.portfolio['tickers'][self.remains]['entry'],
+                    'entry': close if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                     'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                     'close': close,
                     'stop': self.floor2(close * (100 - self.STOP_SIZE) / 100),
