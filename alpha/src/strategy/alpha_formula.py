@@ -265,6 +265,8 @@ class MeanReversion(AllocStrategy):
     # Rebalances weekly, checks stops daily
     SLOT_COUNT = 10
     STOP_SIZE = 5  # percents
+    RSI_ENTRY = 20
+    RSI_EXIT = 70
     TTL_DAYS = 45  # close position after TTL_DAYS
 
     TTL_SECS = TTL_DAYS * 24 * 60 * 60
@@ -301,7 +303,7 @@ class MeanReversion(AllocStrategy):
                             #print(weekly_series)
                             rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
                             #self.log(f"{ticker} passed, rsi {rsi}")
-                            if rsi < 20:  # The Weekly 2-period RSI of the stock is below 20
+                            if rsi < self.RSI_ENTRY:  # The Weekly 2-period RSI of the stock is below 20
                                 if close_month / close_now > 1.5:
                                     self.error(f"{ticker}: {close_now}, year {close_year}, month {close_month} - significant price drop, check for splits or fraud!")
                                 daily_return = d.close / d.close.shift(1)
@@ -392,7 +394,7 @@ class MeanReversion(AllocStrategy):
                     #print(weekly_series)
                     rsi = AllocStrategy.compute_rsi(weekly_series).iloc[-1]
                     self.log(f"{ticker}: weekly rsi={rsi:.2f}")
-                    if rsi > 80:
+                    if rsi > self.RSI_EXIT:
                         result.add(ticker)
                     else:
                         if self.today_open - info['entry_time'] >= self.TTL_SECS:
