@@ -36,6 +36,7 @@ After creating positions for Mean Reversion strategy (mr), write down the actual
   * 1 - filtered out by security type
   * 2 - not available at broker
   * 3 - fraudulent
+  * 4 - not available at massive.com
 
 
 
