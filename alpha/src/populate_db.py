@@ -12,10 +12,16 @@ cursor = conn.cursor()
 
 # Create tables
 cursor.executescript("""
-CREATE TABLE IF NOT EXISTS tickers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT UNIQUE NOT NULL,
-    roboforex_sfx TEXT NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS "tickers" (
+	"id"	INTEGER,
+	"symbol"	TEXT NOT NULL UNIQUE,
+	"roboforex_sfx"	TEXT NOT NULL DEFAULT '',
+	"type"	TEXT NOT NULL DEFAULT '',
+	"name"	TEXT NOT NULL DEFAULT '',
+	"disabled"	INTEGER NOT NULL DEFAULT 0,
+	"sic_code"	INTEGER,
+	"sic_description"	TEXT,
+	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
 CREATE TABLE IF NOT EXISTS prices (
