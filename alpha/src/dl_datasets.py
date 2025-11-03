@@ -19,7 +19,7 @@ def tiingo_req(ticker, start_date, end_date, token, fn):
         f.write(response.content)
 
 def polygon_daily_req(ticker, start_date, fn):
-    url = f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false&apiKey={token}"
+    url = f"https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false&apiKey={token}"
     print(f"Downloading daily summary from {url}")
     
     response = requests.get(url)
@@ -33,7 +33,7 @@ def polygon_daily_req(ticker, start_date, fn):
         f.write(response.content)
 
 def polygon_req(ticker, start_date, end_date, token, fn):
-    url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{start_date}/{end_date}?adjusted=true&sort=asc&apiKey={token}"
+    url = f"https://api.massive.com/v2/aggs/ticker/{ticker}/range/1/day/{start_date}/{end_date}?adjusted=true&sort=asc&apiKey={token}"
     print(f"Downloading {ticker} from {url}")
     
     response = requests.get(url)

@@ -7,7 +7,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 
 def dl_daily_summary(conn, ids, token, start_date):
-    url = f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false"
+    url = f"https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/{start_date}?adjusted=true&include_otc=false"
     print(f"Downloading daily summary from {url}")
 
     response = requests.get(f"{url}&apiKey={token}")
@@ -56,7 +56,7 @@ def dl_daily_summary(conn, ids, token, start_date):
     return count
 
 def load_ticker_info():
-    url = f"https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&order=asc&limit=1000&sort=ticker"
+    url = f"https://api.massive.com/v3/reference/tickers?market=stocks&active=true&order=asc&limit=1000&sort=ticker"
     while True:
         print(f"Downloading ticker info from {url}")
 
