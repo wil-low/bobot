@@ -267,7 +267,7 @@ class MeanReversion(AllocStrategy):
     STOP_SIZE = 5  # percents
     RSI_ENTRY = 20
     RSI_EXIT = 70
-    TTL_DAYS = 45  # close position after TTL_DAYS
+    TTL_DAYS = 42  # close position after TTL_DAYS
 
     TTL_SECS = TTL_DAYS * 24 * 60 * 60
 
@@ -335,10 +335,19 @@ class MeanReversion(AllocStrategy):
                     free_value -= info['close'] * info['qty']
 
         top = sorted(top, key=lambda x: x['volatility'], reverse=False)
+
         self.log(f"Excluded_symbols: {excluded_symbols}")
+
+        exclude_str = ''
+        exclude_count = 50
+
         self.log(f"Top candidates:")
         for item in top:
             self.log(f"   {item['ticker']:5s} vol {item['volatility']:.5f}, rsi {item['rsi']:5.2f}, px {item['close']:6.2f}")
+            if exclude_count > 0:
+                exclude_str += f"{item['ticker']},"
+                exclude_count -= 1
+        self.log(f"--exclude {exclude_str}")
 
         free_slots = self.SLOT_COUNT - occupied_slots
         top_sorted = top[:free_slots]
