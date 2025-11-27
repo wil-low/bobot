@@ -66,15 +66,17 @@ def print_summary(p, keys):
         names[row[0]] = (row[1], row[2])
 
     logger.info("Portfolio summary:")
-    summary = {} 
+    s = p['summary']
+    summary_qty = {}
+    summary_value = {}
     for key in keys:
         if key in p:
             for t, data in p[key]['tickers'].items():
-                summary[t] = summary.get(t, 0) + data['qty'];
-    for t in sorted(summary.keys()):
-        logger.info(f"  {'-' if summary[t] < 0 else ' '} {t:6s}= {abs(summary[t]):6.2f}    {names[t][0]:4s}  {names[t][1]}")
+                summary_qty[t] = summary_qty.get(t, 0) + data['qty'];
+                summary_value[t] = summary_value.get(t, 0) + data['qty'] * data['close'];
+    for t in sorted(summary_qty.keys()):
+        logger.info(f"  {'-' if summary_qty[t] < 0 else ' '} {t:6s}= {abs(summary_qty[t]):6.2f}  {(abs(summary_value[t]) / s['equity'] * 100):6.2f}%   {names[t][0]:4s}  {names[t][1]}")
     logger.info('')
-    s = p['summary']
     logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
     for key in keys:
         logger.info(f"    {key}: {floor2(p[key]['summary']['equity'] / p['summary']['equity'] * 100)}%")
