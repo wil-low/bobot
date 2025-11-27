@@ -72,7 +72,7 @@ def print_summary(p, keys):
             for t, data in p[key]['tickers'].items():
                 summary[t] = summary.get(t, 0) + data['qty'];
     for t in sorted(summary.keys()):
-        logger.info(f"    {t:6s}= {abs(summary[t]):6.2f}    {names[t][0]:4s}  {names[t][1]}")
+        logger.info(f"  {'-' if summary[t] < 0 else ' '} {t:6s}= {abs(summary[t]):6.2f}    {names[t][0]:4s}  {names[t][1]}")
     logger.info('')
     s = p['summary']
     logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
