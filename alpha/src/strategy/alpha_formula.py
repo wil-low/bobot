@@ -272,7 +272,7 @@ class MeanReversion(AllocStrategy):
     TTL_SECS = TTL_DAYS * 24 * 60 * 60
 
     def __init__(self, logger, key, portfolio, today):
-        self.long_trend_ticker = 'SPLG'
+        self.long_trend_ticker = 'SPYM'
         self.remains = 'JPST'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()

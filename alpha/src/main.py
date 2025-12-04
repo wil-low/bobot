@@ -207,8 +207,8 @@ def alpha_alloc(config, today, action, excluded_symbols):
     else:
         try:
             if action == 'next':
+                logger.info(f"Reading portfolio from {work_dir}/{today}.json")
                 with open(f"{work_dir}/{today}.json") as f:
-                    logger.info(f"Reading portfolio from {work_dir}/{today}.json")
                     portfolio = json.load(f)
                     #print(portfolio)
             else:

@@ -136,7 +136,7 @@ class CRSISP500(AllocStrategy):
         cursor.execute(query)
         rows = cursor.fetchall()
         tickers = [row[0] for row in rows]
-        tickers.append('SPLG')  # remains
+        tickers.append('SPYM')  # remains
         return tickers
 
 
