@@ -144,6 +144,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
         broker = RStockTrader(config['auth'])
         print(broker.positions)
         action = {
+            "date": today,
             "summary": {
                 #"balance": broker.getcash(),
                 #"equity": broker.getvalue()
