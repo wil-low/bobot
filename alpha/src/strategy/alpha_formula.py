@@ -152,9 +152,16 @@ class ETFAvalanches(AllocStrategy):
     ENTRY_DELTA = 1.5  # put a sell limit order ENTRY_DELTA% above the current price
 
     def __init__(self, logger, key, portfolio, today):
+        self.remains = 'JPST'
         super().__init__(logger, key, portfolio, today)
-        self.remains = self.tickers[-1]
         self.log(f"trying to rebalance")
+
+    def get_tickers(self):
+        tickers = super().get_tickers()
+        for t in self.portfolio['tickers']:
+            if t not in tickers:
+                tickers.append(t)
+        return tickers
 
     def allocate(self, excluded_symbols):
         top = []
@@ -168,7 +175,7 @@ class ETFAvalanches(AllocStrategy):
                         self.log(f"{ticker}: -month")
                         #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
                         rsi = AllocStrategy.compute_rsi(d.close).iloc[-10:]
-                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]:.2f}")
+                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]:.2f}, close {d.close.iloc[-1]}")
                         if rsi.iloc[-1] > 70:
                             #self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
                             threshold = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA * 2 / 100))  # make sure we are not too close to exit condition
@@ -176,7 +183,7 @@ class ETFAvalanches(AllocStrategy):
                                 entry = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA / 100))
                                 daily_return = d.close / d.close.shift(1)
                                 volatility = daily_return.rolling(window=100).std()
-                                top.append({'ticker': ticker, 'entry': entry, 'close': d.close.iloc[-1], 'rsi': rsi.iloc[-1], 'volatility': volatility.iloc[-1]})
+                                top.append({'ticker': ticker, 'entry': entry, 'close': d.close.iloc[-1], 'stop': d.close.iloc[-21 * 1 - 1], 'rsi': rsi.iloc[-1], 'volatility': volatility.iloc[-1]})
                             else:
                                 self.log(f"{ticker}: below threshold")
 
@@ -200,7 +207,7 @@ class ETFAvalanches(AllocStrategy):
         top = sorted(top, key=lambda x: x['volatility'], reverse=True)
         self.log(f"Top candidates:")
         for item in top:
-            self.log(f"   {item['ticker']:5s} vol={item['volatility']:.5f}, rsi={item['rsi']:.2f}, px={item['close']:.2f}")
+            self.log(f"   {item['ticker']:5s} vol={item['volatility']:.5f}, rsi={item['rsi']:.2f}, px={item['close']:.2f}     {self.data[item['ticker']].index[-1].strftime("%Y-%m-%d")}")
 
         free_slots = self.SLOT_COUNT - occupied_slots
         top_sorted = top[:free_slots]
@@ -219,6 +226,7 @@ class ETFAvalanches(AllocStrategy):
                     'entry': entry if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry'],
                     'entry_time': self.today_open if item['ticker'] not in self.portfolio['tickers'] else self.portfolio['tickers'][item['ticker']]['entry_time'],
                     'close': entry,
+                    'stop': item['stop'],
                     'type': 'limit'
                 }
             else:
@@ -257,6 +265,13 @@ class ETFAvalanches(AllocStrategy):
                     rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
                     if rsi < 15:
                         self.log(f"{ticker}: rsi {rsi} - to be closed")
+                        result.add(ticker)
+                if 'stop' in info:
+                    stop_px = info['stop']
+                    low = d.low.iloc[-1]
+                    high = d.high.iloc[-1]
+                    #self.log(f"{ticker}: checking stop {stop_px} vs high {high}, low {low}")
+                    if high > stop_px:  # stop order triggered
                         result.add(ticker)
         return result
 
@@ -343,7 +358,7 @@ class MeanReversion(AllocStrategy):
 
         self.log(f"Top candidates:")
         for item in top:
-            self.log(f"   {item['ticker']:5s} vol {item['volatility']:.5f}, rsi {item['rsi']:5.2f}, px {item['close']:6.2f}")
+            self.log(f"   {item['ticker']:5s} vol {item['volatility']:.5f}, rsi {item['rsi']:5.2f}, px {item['close']:6.2f}     {self.data[item['ticker']].index[-1].strftime("%Y-%m-%d")}")
             if exclude_count > 0:
                 exclude_str += f"{item['ticker']},"
                 exclude_count -= 1

@@ -289,7 +289,7 @@ class AllocStrategy:
             if close_pos:
                 diff = abs(diff) * (1 if old_qty > 0 else -1)
                 upnl = self.floor2((old_tickers[ticker]['close'] - old_tickers[ticker]['entry']) * diff)
-                self.log(f"{ticker}, close pos, ({old_tickers[ticker]['close']} - {old_tickers[ticker]['entry']}) * {diff} = {upnl}")
+                self.log(f"{ticker:5s}, close pos, ({old_tickers[ticker]['close']:6.2f} - {old_tickers[ticker]['entry']:6.2f}) * {diff:5.2f} = {upnl:7.2f}")
                 old_portfolio['summary']['upnl'] -= upnl
                 old_portfolio['summary']['balance'] += upnl
 
