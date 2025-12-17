@@ -1,4 +1,3 @@
 VGIT
 SCHQ
 VGLT
-SCHR

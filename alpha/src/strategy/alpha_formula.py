@@ -81,7 +81,7 @@ class DynamicTreasures(AllocStrategy):
     # Rebalances weekly
     def __init__(self, logger, key, portfolio, today):
         super().__init__(logger, key, portfolio, today)
-        self.remains = self.tickers[-1]
+        self.remains ='SCHR'
         if len(self.portfolio['tickers']) == 0:
             self.rebalance = True
         else:
