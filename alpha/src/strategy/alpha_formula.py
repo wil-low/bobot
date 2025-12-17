@@ -80,14 +80,21 @@ class RisingAssets(AllocStrategy):
 class DynamicTreasures(AllocStrategy):
     # Rebalances weekly
     def __init__(self, logger, key, portfolio, today):
-        super().__init__(logger, key, portfolio, today)
         self.remains ='SCHR'
+        super().__init__(logger, key, portfolio, today)
         if len(self.portfolio['tickers']) == 0:
             self.rebalance = True
         else:
             self.rebalance = datetime.strptime(today, '%Y-%m-%d').weekday() == 0
         if self.rebalance:
             self.log(f"trying to rebalance")
+
+    def get_tickers(self):
+        tickers = super().get_tickers()
+        for t in self.portfolio['tickers']:
+            if t not in tickers:
+                tickers.append(t)
+        return tickers
 
     def allocate(self, excluded_symbols):
         if self.rebalance:
