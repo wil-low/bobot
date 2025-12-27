@@ -592,3 +592,412 @@ These are **prime candidates for violent bear market rallies**.
 Total ETFs: **57** → nicely within the **50–60 target range**.
 
 ---
+
+```
+BITO is good for shorting due to volatility but monthly dividends mess with short position...
+```
+
+You are thinking about exactly the *right* issue. Your concern is **structurally valid**, not cosmetic.
+
+Let’s break this down precisely and then decide what to do with **BITO** in an **ETF Avalanches (short-only, systematic)** context.
+
+---
+
+## 1. Why BITO Is Attractive for ETF Avalanches
+
+BITO has **three properties that are ideal for short-only mean reversion**:
+
+### ✓ Extremely high volatility
+
+* Bitcoin routinely has 60–100% annualized volatility.
+* This pushes BITO **to the top of your 100-day volatility ranking**, meaning it will frequently get selected when slots are available.
+
+### ✓ Violent bear-market rallies
+
+* Crypto bear markets produce sharp +10–30% counter-trend bounces.
+* These are exactly the setups ETF Avalanches is designed to fade.
+
+### ✓ Weak long-term decay profile
+
+* BITO suffers from futures contango and roll drag.
+* Long-term holders are punished → **structural tailwind for shorting**.
+
+So conceptually: **BITO fits the strategy perfectly**.
+
+---
+
+## 2. Why Monthly Distributions Break Short-Only Systematics
+
+Now the problem — and it’s a real one.
+
+### How BITO distributions affect shorts
+
+When you are **short** BITO:
+
+* You are **liable for all distributions** (dividends / capital gains).
+* The broker debits your account on ex-dividend date.
+
+For BITO specifically:
+
+* Distributions are **monthly**
+* Amounts are **variable and sometimes large**
+* They are not linked to price action or RSI/momentum signals
+
+This introduces:
+
+| Issue                | Impact                                         |
+| -------------------- | ---------------------------------------------- |
+| Non-price cash flows | Breaks PnL attribution                         |
+| Strategy drift       | Losses unrelated to signals                    |
+| Backtest mismatch    | Most backtests ignore short dividend liability |
+| Random timing        | Can hit during winning trades                  |
+
+In a **mean-reversion short strategy**, this is toxic because:
+
+* Holding periods are short (days to weeks)
+* A single distribution can wipe out multiple small wins
+* The strategy already “nibbles” in bull markets → distributions amplify drag
+
+---
+
+## 3. This Is Not a Minor Issue — It’s Structural
+
+This is **not** like normal equity dividends where:
+
+* Payments are small
+* Frequency is quarterly
+* Size is predictable
+
+BITO’s distributions:
+
+* Are **large relative to price**
+* Occur **frequently**
+* Are tied to futures accounting mechanics, not economics
+
+This makes BITO **fundamentally incompatible** with clean short-only systematic execution unless handled explicitly.
+
+---
+
+## 4. Your Options (Ranked by Professional Quality)
+
+### **Option 1 — Remove BITO from Short Universe (Best for Clean System)**
+
+**This is the cleanest, most robust solution.**
+
+Pros:
+
+* Removes non-price risk
+* Keeps strategy behavior consistent
+* Improves Sharpe reliability
+* Eliminates surprise PnL hits
+
+Cons:
+
+* Lose crypto volatility exposure
+
+**Professional verdict:**
+Most systematic managers would **exclude BITO from short universes** for this reason alone.
+
+---
+
+### **Option 2 — Conditional BITO Shorting (Advanced but Viable)**
+
+Keep BITO **only if ALL of the following are true**:
+
+* Not within X days of known ex-div date
+* Expected holding period < distribution window
+* Position size is capped lower than other ETFs
+
+This requires:
+
+* Dividend calendar integration
+* Position-level logic exceptions
+* More complexity than most retail platforms justify
+
+**Verdict:** Viable, but complexity-heavy.
+
+---
+
+### **Option 3 — Accept Distribution Drag as “Cost of Volatility” (Not Recommended)**
+
+You can treat distributions as:
+
+* A volatility tax
+* An implicit borrow cost
+
+But this:
+
+* Masks true performance
+* Makes results path-dependent
+* Reduces comparability across assets
+
+**Verdict:** This turns a systematic strategy into a discretionary one.
+
+---
+
+## 5. What I Would Recommend for *Your* Setup
+
+Given:
+
+* You trade via **CFDs**
+* You care about **clean execution and regime behavior**
+* You already observed MJ-style tail risk
+* ETF Avalanches is meant to be a *portfolio component*, not a PnL engine
+
+### **My clear recommendation**
+
+**Remove BITO from the short universe.**
+
+If you want crypto exposure:
+
+* Handle it in a **separate discretionary or trend-following sleeve**
+* Or restrict crypto shorts to **spot CFDs without distributions**, if available
+
+---
+
+## 6. Final Bottom Line
+
+Your intuition is correct.
+
+> **BITO is an excellent theoretical short — but a poor operational one.**
+
+In systematic short-only strategies:
+
+* **Operational friction matters more than volatility**
+* Clean price action beats clever ideas
+
+If you want, next we can:
+
+* Replace BITO with a **non-distributing crypto proxy**
+* Or redesign a **crypto-specific mean reversion short sleeve**
+* Or finalize your ETF Avalanches universe *without* crypto
+
+Just say where you want to go next.
+
+
+```
+Replace BITO with a non-distributing crypto proxy
+Or redesign a crypto-specific mean reversion short sleeve
+```
+
+Below is a **clean, systematic answer**, split into two concrete paths. I will be explicit about **what works in practice**, given CFDs, liquidity constraints, and your desire to keep **ETF Avalanches mechanically honest**.
+
+---
+
+# Option A — Replace BITO with a Non-Distributing Crypto Proxy
+
+(**Preferred if you want to keep crypto inside ETF Avalanches**)
+
+## Why this is hard
+
+Most *spot* crypto ETFs either:
+
+* do not exist (outside BTC/ETH), or
+* are futures-based with distributions (BITO, BTF, etc.)
+
+So the replacement must satisfy:
+
+1. **No dividends / distributions**
+2. **High volatility**
+3. **Tradable via CFD**
+4. **Gappy behavior acceptable** (Avalanches expects gaps)
+
+---
+
+## Best Non-Distributing Proxies (Ranked)
+
+### **1️⃣ COIN (Coinbase Global) — Best Practical Substitute**
+
+**Role:** Crypto beta proxy via equity
+**Dividend:** None
+**Volatility:** Very high
+**Liquidity:** Excellent
+
+Why it works:
+
+* Strongly correlated with BTC in downtrends
+* Violent bear-market rallies
+* No distributions
+* Clean borrow mechanics
+
+Behaviorally:
+
+* COIN rallies harder than BTC during euphoric bounces
+* Dumps harder when crypto sentiment collapses
+
+**ETF Avalanches fit:** ★★★★★
+**Professional verdict:** *This is the cleanest BITO replacement.*
+
+---
+
+### **2️⃣ MSTR (MicroStrategy)**
+
+**Role:** Leveraged BTC proxy
+**Dividend:** None
+**Volatility:** Extreme
+
+Pros:
+
+* Even higher volatility than COIN
+* Pure BTC exposure via balance sheet
+
+Cons:
+
+* Single-company risk
+* Occasional idiosyncratic squeezes
+
+**Use if:** You want maximum convexity
+**Risk:** Higher tail risk than COIN
+
+---
+
+### **3️⃣ BLOK (Blockchain ETF)** — *Conditional*
+
+**Dividend:** Small / irregular
+**Volatility:** High
+**Liquidity:** Moderate
+
+Better than BITO, worse than COIN:
+
+* Still equity-based
+* Some distribution risk (small)
+* Less explosive
+
+---
+
+### ❌ Why NOT spot BTC ETPs
+
+* Often unavailable
+* Or still distribute
+* Or have poor CFD liquidity
+
+---
+
+### ✅ **Recommended Replacement**
+
+**Remove BITO → Add COIN**
+
+If you want redundancy:
+
+* COIN + MSTR (but cap MSTR size)
+
+---
+
+# Option B — Crypto-Specific Mean Reversion Short Sleeve
+
+(**Cleaner, more professional architecture**)
+
+This is the *better long-term design*.
+
+Instead of forcing crypto into ETF Avalanches, you isolate it.
+
+---
+
+## Why Crypto Should Be Its Own Sleeve
+
+Crypto differs structurally:
+
+* Trades 24/7
+* Much higher volatility
+* No central valuation anchor
+* Extreme reflexivity
+
+ETF Avalanches assumes:
+
+* Equity-style regime behavior
+* Macro-driven bear markets
+* Mean reversion after *risk-off rallies*
+
+Crypto obeys different rules.
+
+---
+
+## Crypto Short Sleeve (Clean Design)
+
+### **Universe**
+
+Choose **3–5 instruments max**:
+
+* COIN
+* MSTR
+* MARA / RIOT (optional, very volatile)
+* BTCUSD CFD (if allowed, no funding abuse)
+
+---
+
+### **Entry Rules (Crypto-Specific)**
+
+Tighter and faster than ETFs:
+
+* Long-term filter:
+  100-day return < 0
+* Intermediate filter:
+  20-day return < 0
+* Short-term overbought:
+  RSI(2) > 85 **or** RSI(3) > 80
+* Entry:
+  Limit sell 2–4% above close
+  (crypto rallies overshoot more than equities)
+
+---
+
+### **Exit Rules**
+
+* RSI(2) < 10
+* OR time stop: 3–7 days max
+* OR +8–12% favorable move
+
+No long holding periods.
+
+---
+
+### **Capital Allocation**
+
+* 5–10% of portfolio max
+* Independent risk budget
+* Never competes with ETF Avalanches slots
+
+---
+
+## Benefits of Separation
+
+| Benefit               | Why it matters        |
+| --------------------- | --------------------- |
+| Cleaner stats         | No dividend noise     |
+| Better regime control | Crypto ≠ equities     |
+| Higher Sharpe         | Fewer false signals   |
+| Easier risk caps      | Crypto can’t dominate |
+
+**This is how professionals would structure it.**
+
+---
+
+# Final Recommendation (Clear and Direct)
+
+Given your stated goals:
+
+> ✔ systematic
+> ✔ mean-reversion
+> ✔ regime-aware
+> ✔ minimal hidden costs
+
+### **Do this:**
+
+* **Remove BITO entirely**
+* **Add COIN as crypto proxy** *or*
+* **Create a separate crypto short sleeve**
+
+### If forced to choose one:
+
+**Separate crypto sleeve > COIN replacement > BITO**
+
+---
+
+If you want, next we can:
+
+* Tune parameters specifically for COIN/MSTR
+* Stress-test crypto sleeve vs ETF Avalanches
+* Decide position caps so crypto never dominates portfolio risk
+
+Just tell me which direction you want to finalize.
+
