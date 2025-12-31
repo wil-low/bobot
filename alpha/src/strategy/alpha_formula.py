@@ -159,7 +159,7 @@ class ETFAvalanches(AllocStrategy):
     ENTRY_DELTA = 1.5  # put a sell limit order ENTRY_DELTA% above the current price
 
     def __init__(self, logger, key, portfolio, today):
-        self.remains = 'JPST'
+        self.remains = 'SCHO'
         super().__init__(logger, key, portfolio, today)
         self.log(f"trying to rebalance")
 
@@ -168,6 +168,8 @@ class ETFAvalanches(AllocStrategy):
         for t in self.portfolio['tickers']:
             if t not in tickers:
                 tickers.append(t)
+        if self.remains not in tickers:
+            tickers.append(self.remains)
         return tickers
 
     def allocate(self, excluded_symbols):
@@ -295,7 +297,7 @@ class MeanReversion(AllocStrategy):
 
     def __init__(self, logger, key, portfolio, today):
         self.long_trend_ticker = 'SPYM'
-        self.remains = 'JPST'
+        self.remains = 'SCHO'
         super().__init__(logger, key, portfolio, today)
         self.weekday = datetime.strptime(today, '%Y-%m-%d').weekday()
         if len(self.portfolio['tickers']) == 0:

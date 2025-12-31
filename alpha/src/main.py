@@ -170,7 +170,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
                         continue
                 else:
                     action[key]['tickers'][ticker] = info
-                    if ticker != 'JPST':
+                    if ticker != 'SCHO':
                         action[key]['tickers'][ticker]['qty'] = p['qty']
                     if action[key]['tickers'][ticker]['close'] != p['close']:
                         action[key]['tickers'][ticker]['close'] = p['close']
