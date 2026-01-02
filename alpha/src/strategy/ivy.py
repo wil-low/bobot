@@ -93,12 +93,12 @@ class Ivy(AllocStrategy):
             "VB",
             "VEU",
             "VWO",
-            "BND",
-            "TIP",
+            "HYG",
+            "EMLC",
             "VNQ",
             "RWX",
             "PDBC",
-            "COMT"
+            "DBMF"
         ]
         tickers.append(self.remains)
         return tickers
