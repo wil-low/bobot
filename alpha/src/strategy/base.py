@@ -64,19 +64,21 @@ class AllocStrategy:
                 low = self.data[ticker].low.iloc[-1]
                 high = self.data[ticker].high.iloc[-1]
                 close = self.data[ticker].close.iloc[-1]
-                self.log(f"{ticker}: check expire for {'BUY' if info['qty'] > 0 else 'SELL'} {info['type']}: entry {entry}, open {open}, low {low}, high {high}, close {close}")
+                message = ''
                 if info['type'] == 'limit':
                     if not ((qty > 0 and entry > low) or (qty < 0 and entry < high)):  # not filled
                         del self.portfolio['tickers'][ticker]
-                        self.log(f"{ticker}: day order expired")
+                        message = ': limit order expired'
                     else:
                         info['type'] = 'market'
                 elif info['type'] == 'stop':
                     if not ((qty > 0 and entry < high) or (qty < 0 and entry > low)):  # not filled
                         del self.portfolio['tickers'][ticker]
-                        self.log(f"{ticker}: day order expired")
+                        message = ': stop order expired'
                     else:
                         info['type'] = 'market'
+                if message != '':
+                    self.log(f"{ticker:5s}: {'BUY' if info['qty'] > 0 else 'SELL'} {info['type']}: entry {entry:6.2f}, o {open:6.2f}, h {high:6.2f}, l {low:6.2f}, c {close:6.2f} {message}")
 
         # update prices by previous day close
         self.log(f"update prices:")

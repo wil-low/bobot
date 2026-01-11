@@ -67,15 +67,20 @@ def print_summary(p, keys):
 
     logger.info("Portfolio summary:")
     s = p['summary']
-    summary_qty = {}
-    summary_value = {}
+    summary = {}
     for key in keys:
         if key in p:
             for t, data in p[key]['tickers'].items():
-                summary_qty[t] = summary_qty.get(t, 0) + data['qty'];
-                summary_value[t] = summary_value.get(t, 0) + data['qty'] * data['close'];
-    for t in sorted(summary_qty.keys()):
-        logger.info(f"  {'-' if summary_qty[t] < 0 else ' '} {t:6s}= {abs(summary_qty[t]):6.2f}  {(abs(summary_value[t]) / s['equity'] * 100):6.2f}%   {names[t][0]:4s}  {names[t][1]}")
+                if not t in summary:
+                    summary[t] = {'qty': 0, 'value': 0, 'pending': ' ', 'short': ' '}
+                summary[t]['qty'] = summary[t]['qty'] + data['qty'];
+                summary[t]['value'] = summary[t]['value'] + data['qty'] * data['close'];
+                if data['type'] == 'limit':
+                    summary[t]['pending'] = '?'
+    for t in sorted(summary.keys()):
+        if summary[t]['qty'] < 0:
+            summary[t]['short'] = '-'
+        logger.info(f" {summary[t]['pending']}{summary[t]['short']} {t:6s}= {abs(summary[t]['qty']):6.2f}  {(abs(summary[t]['value']) / s['equity'] * 100):6.2f}%   {names[t][0]:4s}  {names[t][1]}")
     logger.info('')
     logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
     for key in keys:
@@ -170,6 +175,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
                         continue
                 else:
                     action[key]['tickers'][ticker] = info
+                    action[key]['tickers'][ticker]['type'] = 'market'
                     if ticker != 'SCHO':
                         action[key]['tickers'][ticker]['qty'] = p['qty']
                     if action[key]['tickers'][ticker]['close'] != p['close']:

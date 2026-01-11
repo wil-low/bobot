@@ -94,6 +94,8 @@ class DynamicTreasures(AllocStrategy):
         for t in self.portfolio['tickers']:
             if t not in tickers:
                 tickers.append(t)
+        if self.remains not in tickers:
+            tickers.append(self.remains)
         return tickers
 
     def allocate(self, excluded_symbols):
@@ -157,6 +159,7 @@ class ETFAvalanches(AllocStrategy):
     # Rebalances daily
     SLOT_COUNT = 5
     ENTRY_DELTA = 1.5  # put a sell limit order ENTRY_DELTA% above the current price
+    RSI_EXIT = 15
 
     def __init__(self, logger, key, portfolio, today):
         self.remains = 'SCHO'
@@ -272,7 +275,7 @@ class ETFAvalanches(AllocStrategy):
                     result.add(ticker)
                 else:
                     rsi = AllocStrategy.compute_rsi(d.close).iloc[-1]
-                    if rsi < 15:
+                    if rsi < self.RSI_EXIT:
                         self.log(f"{ticker}: rsi {rsi} - to be closed")
                         result.add(ticker)
                 if 'stop' in info:
