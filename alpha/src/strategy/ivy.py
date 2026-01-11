@@ -89,13 +89,13 @@ class Ivy(AllocStrategy):
 
     def get_tickers(self):
         tickers = [
-            "VTI",
-            "VB",
+            "SCHB",
+            "SCHA",
             "VEU",
             "VWO",
             "HYG",
             "EMLC",
-            "VNQ",
+            "SCHH",
             "RWX",
             "PDBC",
             "DBMF"
