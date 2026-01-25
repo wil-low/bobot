@@ -49,15 +49,22 @@ def save_portfolio(p, fn):
     with open(fn, 'w') as f:
         json.dump(p, f, indent=4, sort_keys=True)
 
-def print_summary(p, keys):
+def print_summary(p, keys, type):
     # load ticker descriptions from DB
-    conn = sqlite3.connect(AllocStrategy.DB_FILE)
-
-    query = f"""
-    SELECT t.symbol, t.type, t.name FROM tickers t
-    WHERE t.disabled = 0
-    ORDER BY t.symbol
-    """
+    if type == "forex":
+        conn = sqlite3.connect(AllocStrategy.FOREX_DB_FILE)
+        query = f"""
+        SELECT t.symbol, 'FOR', t.symbol as name FROM tickers t
+        WHERE t.disabled = 0
+        ORDER BY t.symbol
+        """
+    else:
+        conn = sqlite3.connect(AllocStrategy.STOCK_DB_FILE)
+        query = f"""
+        SELECT t.symbol, t.type, t.name FROM tickers t
+        WHERE t.disabled = 0
+        ORDER BY t.symbol
+        """
     cursor = conn.cursor()
     cursor.execute(query)
     rows = cursor.fetchall()
@@ -80,7 +87,7 @@ def print_summary(p, keys):
     for t in sorted(summary.keys()):
         if summary[t]['qty'] < 0:
             summary[t]['short'] = '-'
-        logger.info(f" {summary[t]['pending']}{summary[t]['short']} {t:6s}= {abs(summary[t]['qty']):6.2f}  {(abs(summary[t]['value']) / s['equity'] * 100):6.2f}%   {names[t][0]:4s}  {names[t][1]}")
+        logger.info(f" {summary[t]['pending']}{summary[t]['short']} {t:7s}= {abs(summary[t]['qty']):6.2f}  {(abs(summary[t]['value']) / s['equity'] * 100):6.2f}%   {names[t][0]:4s}  {names[t][1]}")
     logger.info('')
     logger.info(f"Totals: balance {s['balance']}, equity {s['equity']}, margin {s['margin']} ({floor2(s['equity'] / s['margin'] * 100)}%), free_margin {s['free_margin']}, upnl {s['upnl']}")
     for key in keys:
@@ -207,7 +214,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
         fn = f"{work_dir}/{today}_sync.json"
         with open(fn, 'w') as f:
             json.dump(action, f, indent=4, sort_keys=True)
-        print_summary(action, keys)
+        print_summary(action, keys, config.get('type', 'stock'))
         logger.info(f"Portfolio written to {fn}")
         return
 
@@ -269,7 +276,7 @@ def alpha_alloc(config, today, action, excluded_symbols):
 
     if config.get('compute_totals', True):
         compute_totals(new_portfolio, keys)
-        print_summary(new_portfolio, keys)
+        print_summary(new_portfolio, keys, config.get('type', 'stock'))
 
     next_date_str = next_working_day(today)
     new_portfolio['date'] = next_date_str

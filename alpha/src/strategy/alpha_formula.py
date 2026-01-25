@@ -446,7 +446,7 @@ class MeanReversion(AllocStrategy):
 
     def get_tickers(self):
         # load from DB instead of file
-        conn = sqlite3.connect(AllocStrategy.DB_FILE)
+        conn = sqlite3.connect(AllocStrategy.STOCK_DB_FILE)
 
         query = f"""
         SELECT p.ticker_id, t.symbol

@@ -9,39 +9,57 @@ import numpy as np
 import pandas as pd
 
 class AllocStrategy:
-    DB_FILE = "work/stock.sqlite"
+    STOCK_DB_FILE = "work/stock.sqlite"
+    FOREX_DB_FILE = "work/forex.sqlite"
     ALLOC_PERCENT = 99.5
     leverage = 1
 
-    def __init__(self, logger, key, portfolio, today, limit=253):
+    def __init__(self, logger, key, portfolio, today, limit=253, forex_db=False):
         self.key = key
         self.logger = logger
         self.portfolio = portfolio[key]
         self.today = today
         self.today_open = int(datetime.strptime(today + " 16:30", "%Y-%m-%d %H:%M").timestamp())  # US Market Open in UA timezone
         self.rebalance = False
+        self.usd_rates = {}
 
         self.log('')
         self.log(f"========= init =========")
 
         self.tickers = self.get_tickers()
 
-        conn = sqlite3.connect(AllocStrategy.DB_FILE)
+        if forex_db:
+            conn = sqlite3.connect(AllocStrategy.FOREX_DB_FILE)
+            query = f"""
+            SELECT *
+            FROM (
+                SELECT date, close, low, high, open
+                FROM prices
+                JOIN tickers ON prices.ticker_id = tickers.id
+                WHERE tickers.symbol = ? AND date < ?
+                ORDER BY date DESC
+                LIMIT ?
+            )
+            ORDER BY date ASC;
+            """
+        else:
+            conn = sqlite3.connect(AllocStrategy.STOCK_DB_FILE)
+            query = f"""
+            SELECT *
+            FROM (
+                SELECT date, adjClose as close, adjLow as low, adjHigh as high, adjOpen as open
+                FROM prices
+                JOIN tickers ON prices.ticker_id = tickers.id
+                WHERE tickers.symbol = ? AND date < ?
+                ORDER BY date DESC
+                LIMIT ?
+            )
+            ORDER BY date ASC;
+            """
+
         self.data = {}
         for t in self.tickers:
             try:
-                query = f"""
-                SELECT *
-                FROM (
-                    SELECT date, adjClose as close, adjLow as low, adjHigh as high, adjOpen as open
-                    FROM prices
-                    JOIN tickers ON prices.ticker_id = tickers.id
-                    WHERE tickers.symbol = ? AND date < ?
-                    ORDER BY date DESC
-                    LIMIT ?
-                )
-                ORDER BY date ASC;
-                """
                 df = pd.read_sql_query(query, conn, params=(t, today, limit), parse_dates=['date'])
                 df.set_index('date', inplace=True)
 
@@ -52,6 +70,9 @@ class AllocStrategy:
             except FileNotFoundError:
                 pass
         conn.close()
+
+        if forex_db:
+            self.get_usd_rates(today)
 
         # expire Day Limit orders
         for ticker in list(self.portfolio['tickers'].keys()):
@@ -78,18 +99,39 @@ class AllocStrategy:
                     else:
                         info['type'] = 'market'
                 if message != '':
-                    self.log(f"{ticker:5s}: {'BUY' if info['qty'] > 0 else 'SELL'} {info['type']}: entry {entry:6.2f}, o {open:6.2f}, h {high:6.2f}, l {low:6.2f}, c {close:6.2f} {message}")
+                    self.log(f"{ticker:5s}: {'BUY' if info['qty'] > 0 else 'SELL'} {info['type']}: entry {self.floor2(entry, ticker)}, o {self.floor2(open, ticker)}, h {self.floor2(high, ticker)}, l {self.floor2(low, ticker)}, c {self.floor2(close, ticker)} {message}")
 
         # update prices by previous day close
         self.log(f"update prices:")
         for ticker, info in self.portfolio['tickers'].items():
             close = self.data[ticker].close.iloc[-1]
             info['close'] = close
-            margin = self.floor2(abs(close * info['qty'] / self.leverage))
-            self.log(f"   {ticker:6s}: {close:6.2f} * {info['qty']:6.2f} = {margin:7.2f}     {self.data[ticker].index[-1].strftime("%Y-%m-%d")}")
+            margin = self.floor2(abs(close * info['qty'] / self.leverage), ticker)
+            self.log(f"   {ticker:6s}: {self.floor2(close, ticker)} * {info['qty']:6.2f} = {margin:7.2f}     {self.data[ticker].index[-1].strftime("%Y-%m-%d")}")
         self.compute_summary(self.portfolio, self.portfolio['summary'])
         self.allocatable = self.floor2(self.portfolio['summary']['equity'] * self.ALLOC_PERCENT / 100 * self.leverage)  # reserve for fees
         self.log(f"equity={self.portfolio['summary']['equity']}, balance={self.portfolio['summary']['balance']}, allocatable={self.allocatable}")
+
+    def get_usd_rates(self, date):
+        conn = sqlite3.connect(AllocStrategy.FOREX_DB_FILE)
+        query = f"""
+        SELECT t.symbol, REPLACE(t.symbol, 'USD', '') as currency, IIF(t.symbol like '%USD', close, 1 / close) as rate
+        FROM prices p
+        JOIN tickers t ON p.ticker_id = t.id
+        WHERE t.symbol like '%USD%' AND date = (select date from prices where date < ? ORDER by date DESC LIMIT 1)
+        """
+        cursor = conn.cursor()
+        cursor.execute(query, (date,))
+        currency_rates = {}
+        for (symbol, currency, rate) in cursor.fetchall():
+            currency_rates[currency] = rate
+
+        for t in self.tickers:
+            base_curr = t[:3]
+            self.usd_rates[t] = currency_rates[base_curr] if base_curr != 'USD' else 1
+            #print(f"rate {t} = {self.usd_rates[t]}")
+
+        conn.close()
 
     @staticmethod
     def load_tickers(fn):
@@ -110,6 +152,20 @@ class AllocStrategy:
             pd.Series: SMA series with NaN for the first (period - 1) entries.
         """
         return series.rolling(window=period).mean()
+
+    @staticmethod
+    def compute_ema(series: pd.Series, period: int = 200) -> pd.Series:
+        """
+        Compute the Exponential Moving Average (EMA) of a given pandas Series.
+
+        Parameters:
+            series (pd.Series): Input time series data (e.g., closing prices).
+            period (int): The window period for the EMA (default is 200).
+
+        Returns:
+            pd.Series: EMA series with NaN for the first (period - 1) entries.
+        """
+        return series.ewm(span=period, adjust=False).mean()
 
     @staticmethod
     def compute_rsi(series: pd.Series, period=2) -> pd.Series:
@@ -229,7 +285,7 @@ class AllocStrategy:
 
         return adx, plus_di, minus_di
 
-    def floor2(self, val):
+    def floor2(self, val, ticker=None):
         return int(val * 100) / 100
 
     def print_p(self, portfolio):
@@ -255,14 +311,16 @@ class AllocStrategy:
             #self.log(f"{ticker}, old_qty {old_qty}, new_qty {new_qty}, diff {diff}")
             close_pos = False
             if diff > 0:
-                text = f'Buy {diff} of {ticker}, change from {old_qty} to {new_qty}'
+                text = f'Buy {ticker} {diff} ({old_qty} to {new_qty})'
                 if ticker in new_tickers:
                     if new_tickers[ticker]['type'] == 'limit':
-                        text += f", using DAY LIMIT order at {new_tickers[ticker]['entry']}"
+                        text += f", DAY LIMIT at {new_tickers[ticker]['entry']}"
                     elif new_tickers[ticker]['type'] == 'stop':
-                        text += f", using DAY STOP order at {new_tickers[ticker]['entry']}"
+                        text += f", DAY STOP at {new_tickers[ticker]['entry']}"
                 if old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
+                if ticker in new_tickers and 'tgt' in new_tickers[ticker]:
+                    text += f", tgt {new_tickers[ticker]['tgt']}"
                 adds.append({
                     'ticker': ticker,
                     'action': 'buy',
@@ -272,14 +330,16 @@ class AllocStrategy:
                 if old_qty < 0:
                     close_pos = True  # close short
             elif diff < 0:
-                text = f'Sell {-diff} of {ticker}, change from {old_qty} to {new_qty}'
+                text = f'Sell {ticker} {diff} ({old_qty} to {new_qty})'
                 if ticker in new_tickers:
                     if new_tickers[ticker]['type'] == 'limit':
-                        text += f", using DAY LIMIT order at {new_tickers[ticker]['entry']}"
+                        text += f", DAY LIMIT at {new_tickers[ticker]['entry']}"
                     elif new_tickers[ticker]['type'] == 'stop':
-                        text += f", using DAY STOP order at {new_tickers[ticker]['entry']}"
+                        text += f", DAY STOP at {new_tickers[ticker]['entry']}"
                 if old_qty == 0 and 'stop' in new_tickers[ticker]:
                     text += f", stop {new_tickers[ticker]['stop']}"
+                if ticker in new_tickers and 'tgt' in new_tickers[ticker]:
+                    text += f", tgt {new_tickers[ticker]['tgt']}"
                 removes.append({
                     'ticker': ticker,
                     'action': 'sell',
