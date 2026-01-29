@@ -107,7 +107,7 @@ class AllocStrategy:
             close = self.data[ticker].close.iloc[-1]
             info['close'] = close
             margin = self.floor2(abs(close * info['qty'] / self.leverage), ticker)
-            self.log(f"   {ticker:6s}: {self.floor2(close, ticker)} * {info['qty']:6.2f} = {margin:7.2f}     {self.data[ticker].index[-1].strftime("%Y-%m-%d")}")
+            self.log(f"   {ticker:6s}: {self.floor2(close, ticker):6.2f} * {info['qty']:6.2f} = {margin:7.2f}     {self.data[ticker].index[-1].strftime("%Y-%m-%d")}")
         self.compute_summary(self.portfolio, self.portfolio['summary'])
         self.allocatable = self.floor2(self.portfolio['summary']['equity'] * self.ALLOC_PERCENT / 100 * self.leverage)  # reserve for fees
         self.log(f"equity={self.portfolio['summary']['equity']}, balance={self.portfolio['summary']['balance']}, allocatable={self.allocatable}")

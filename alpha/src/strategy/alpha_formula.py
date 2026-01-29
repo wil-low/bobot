@@ -181,13 +181,14 @@ class ETFAvalanches(AllocStrategy):
         for ticker in self.tickers:
             if ticker != self.remains and not ticker in tickers_to_close and not ticker in self.portfolio['tickers']:
                 d = self.data[ticker]
+                msg = f"   {ticker:6s}: y {d.close.iloc[-21 * 12 - 1]:6.2f}, m {d.close.iloc[-21 * 1 - 1]:6.2f}, now {d.close.iloc[-1]:6.2f}     {d.index[-1].strftime("%Y-%m-%d")}"
                 if d.close.iloc[-1] < d.close.iloc[-21 * 12 - 1]:  # negative total return over the past year
-                    self.log(f"{ticker}: -year")
+                    msg += ": -year"
                     if d.close.iloc[-1] < d.close.iloc[-21 * 1 - 1]:  # negative total return over the past month
-                        self.log(f"{ticker}: -month")
+                        msg += ", -month"
                         #print(f"{ticker}: d.close {d.close.iloc[-10:]}")
                         rsi = AllocStrategy.compute_rsi(d.close).iloc[-10:]
-                        self.log(f"{ticker}: rsi check {rsi.iloc[-1]:.2f}, close {d.close.iloc[-1]}")
+                        msg += f", rsi {rsi.iloc[-1]:.2f}"
                         if rsi.iloc[-1] > 70:
                             #self.log(f"{ticker}: rsi {rsi.iloc[-1]}")
                             threshold = self.floor2(d.close.iloc[-1] * (1 + self.ENTRY_DELTA * 2 / 100))  # make sure we are not too close to exit condition
@@ -197,7 +198,8 @@ class ETFAvalanches(AllocStrategy):
                                 volatility = daily_return.rolling(window=100).std()
                                 top.append({'ticker': ticker, 'entry': entry, 'close': d.close.iloc[-1], 'stop': d.close.iloc[-21 * 1 - 1], 'rsi': rsi.iloc[-1], 'volatility': volatility.iloc[-1]})
                             else:
-                                self.log(f"{ticker}: below threshold")
+                                msg += ", below threshold"
+                self.log(msg)
 
         alloc_slot = self.allocatable / self.SLOT_COUNT
         self.log(f"alloc_slot = {alloc_slot:.2f}")
